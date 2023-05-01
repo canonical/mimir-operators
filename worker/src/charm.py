@@ -119,6 +119,13 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         }
 
 
+class BlockedStatusError(Exception):
+    """Raised if there is an error that should set BlockedStatus."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
+
 
 if __name__ == "__main__":  # pragma: nocover
     main(MimirWorkerK8SOperatorCharm)
