@@ -13,16 +13,21 @@ https://discourse.charmhub.io/t/4208
 """
 
 import logging
+import re
+import socket
+from typing import Optional
 
-from charms.observability_libs.v0.juju_topology import JujuTopolgy
+import yaml
+from charms.observability_libs.v0.juju_topology import JujuTopology
 from charms.observability_libs.v1.kubernetes_service_path import (
     KubernetesServicePatch,
     ServicePort,
 )
-
+from interfaces.mimir_worker.v0.schema import ProviderSchema
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.pebble import PathError, ProtocolError
 
 MIMIR_CONFIG = "/etc/mimir/mimir-config.yaml"
 MIMIR_DIR = "/mimir"
@@ -52,6 +57,14 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
 
         self.framework.observe(self.on.httpbin_pebble_ready, self._on_httpbin_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+
+        ProviderSchema(
+            app={
+                "hash_ring": '["some_address"]',
+                "config": '{"key": "value"}',
+                "s3_config": '{"url": "dd", "endpoint": "dd", "secret_key":"SOME_KEY", "access_key":"ANOTHER_KEY", "insecure": "false"}',
+            }
+        )
 
     def _on_httpbin_pebble_ready(self, event):
         """Define and start a workload using the Pebble API.
@@ -117,6 +130,88 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
                 }
             },
         }
+
+    @property
+    def _mimir_version(self) -> Optional[str]:
+        if not self._container.can_connect():
+            return None
+
+        version_output, _ = self._container.exec(["/bin/mimir", "-version"]).wait_output()
+        # Output looks like this:
+        # Mimir, version 2.4.0 (branch: HEAD, revision 32137ee)
+        if result := re.search(r"[Vv]ersion:?\s*(\S+)", version_output):
+            return result.group(1)
+        return None
+
+    def _configure_mimir(self, event):
+        if not self._container.can_connect():
+            self.unit.status = WaitingStatus("Waiting for Pebble ready")
+            return
+
+        try:
+            self._set_alerts()
+            restart = any(
+                [
+                    self._pebble_layer_changed(),
+                    self._mimir_config_changed(),
+                ]
+            )
+
+        except BlockedStatusError as e:
+            self.unit.status = BlockedStatus(e.message)
+            return
+
+        if restart:
+            self._container.restart(self._name)
+            logger.info("Mimir (re)started")
+
+        self.unit.status = ActiveStatus()
+
+    def _mimir_config_changed(self) -> bool:
+        """Set Mimir config.
+
+        Returns: True if config has changed, otherwise False.
+        Raises: BlockedStatusError exception if PebbleError, ProtocolError, PathError exceptions
+            are raised by container.remove_path
+        """
+        config = self._build_mimir_config()
+
+        try:
+            if self._running_mimir_config() != config:
+                config_as_yaml = yaml.safe_dump(config)
+                self._container.push(MIMIR_CONFIG, config_as_yaml, make_dirs=True)
+                logger.info("Pushed new Mimir configuration")
+                return True
+
+            return False
+        except (ProtocolError, Exception) as e:
+            logger.error("Failed to push updated config file: %s", e)
+            raise BlockedStatusError(str(e))
+
+    def _build_mimir_config(self) -> dict:
+        # TODO: Implement this!
+        return {}
+
+    def _running_mimir_config(self) -> dict:
+        if not self._container.can_connect():
+            logger.debug("Could not connect to Mimir container")
+            return {}
+
+        try:
+            raw_current = self._container.pull(MIMIR_CONFIG).read()
+            return yaml.safe_load(raw_current)
+        except (ProtocolError, PathError) as e:
+            logger.warning(
+                "Could not check the current Mimir configuration due to "
+                "a failure in retrieving the file: %s",
+                e,
+            )
+            return {}
+
+    @property
+    def hostname(self) -> str:
+        """Unit's hostname."""
+        return socket.getfqdn()
 
 
 class BlockedStatusError(Exception):

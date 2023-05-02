@@ -6,7 +6,7 @@ from unittest.mock import Mock, PropertyMock
 import pytest
 from charm import BlockedStatusError, MimirWorkerK8SOperatorCharm
 from charms.harness_extensions.v0.evt_sequences import Event, Scenario
-from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
+from charms.observability_libs.v1.kubernetes_service_patch import KubernetesServicePatch
 from ops.model import BlockedStatus, Container, WaitingStatus
 from ops.pebble import ProtocolError
 
@@ -14,16 +14,16 @@ from ops.pebble import ProtocolError
 @pytest.fixture(autouse=True)
 def setup():
     Container.can_connect = Mock(return_value=True)
-    MimirK8SOperatorCharm._mimir_version = PropertyMock(return_value="2.4.0")
-    MimirK8SOperatorCharm._current_mimir_config = PropertyMock(return_value={})
-    MimirK8SOperatorCharm._set_alerts = Mock(return_value=True)
+    MimirWorkerK8SOperatorCharm._mimir_version = PropertyMock(return_value="2.4.0")
+    MimirWorkerK8SOperatorCharm._current_mimir_config = PropertyMock(return_value={})
+    MimirWorkerK8SOperatorCharm._set_alerts = Mock(return_value=True)
     KubernetesServicePatch.__init__ = Mock(return_value=None)
 
 
 def generate_scenario():
     return Scenario.from_events(
         ("install", "config-changed", "start", Event("mimir-pebble-ready", workload=Mock()))
-    )(MimirK8SOperatorCharm)
+    )(MimirWorkerK8SOperatorCharm)
 
 
 def test_deploy_ok_scenario():
@@ -52,7 +52,7 @@ def test_config_changed_cannot_connect():
 
 
 def test_deploy_and_set_alerts_error_scenario():
-    MimirK8SOperatorCharm._set_alerts = Mock(
+    MimirWorkerK8SOperatorCharm._set_alerts = Mock(
         side_effect=BlockedStatusError("Failed to push updated alert files; see debug logs")
     )
     cc = generate_scenario().play_until_complete()
