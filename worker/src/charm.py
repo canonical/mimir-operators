@@ -14,7 +14,10 @@ https://discourse.charmhub.io/t/4208
 
 import logging
 import re
-from typing import Optional
+from dataclasses import asdict, dataclass
+from pydantic import BaseModel
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+from typing import List, Literal, Optional, Union
 
 import yaml
 from charms.observability_libs.v0.juju_topology import JujuTopology
@@ -36,6 +39,105 @@ logger = logging.getLogger(__name__)
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
+class InvalidConfigurationError(Exception):
+    pass
+
+
+class Memberlist(BaseModel):
+    join_members: List[str]
+
+
+class Tsdb(BaseModel):
+    dir: str = "/data/ingester"
+
+
+class BlocksStorage(BaseModel):
+    storage_prefix: str = "blocks"
+    tsdb: Tsdb
+
+
+class Limits(BaseModel):
+    ingestion_rate: int = 0
+    ingestion_burst_size: int = 0
+    max_global_series_per_user: int = 0
+    ruler_max_rules_per_rule_group: int = 0
+    ruler_max_rule_groups_per_tenant: int = 0
+
+
+class Kvstore(BaseModel):
+    store: str = "memberlist"
+
+
+class Ring(BaseModel):
+    kvstore: Kvstore
+
+
+class Distributor(BaseModel):
+    ring: Ring
+
+
+class Ingester(BaseModel):
+    ring: Ring
+
+
+class Ruler(BaseModel):
+    rule_path: str = "/data/ruler"
+    alertmanager_url: Optional[str]
+
+
+class Alertmanager(BaseModel):
+    data_dir: str = "/data/alertmanager"
+    external_url: Optional[str]
+
+
+class _S3StorageBackend(BaseModel):
+    endpoint: str
+    access_key_id: str
+    secret_access_key: str
+    insecure: bool = False
+    signature_version: str = "v4"
+
+
+class _FilesystemStorageBackend(BaseModel):
+    dir: str
+
+
+_StorageBackend = Union[_S3StorageBackend, _FilesystemStorageBackend]
+_StorageKey = Union[Literal["filesystem"], Literal["s3"]]
+
+
+@dataclass
+class CommonConfig:
+    backend: _StorageKey
+    _StorageKey: _StorageBackend
+
+    def __post_init__(self):
+        if not asdict(self).get("s3", "") and not asdict(self).get("s3", ""):
+            raise InvalidConfigurationError("Common storage configuration must specify a type!")
+        elif (asdict(self).get("filesystem", "") and not self.backend != "filesystem") or (
+            asdict(self).get("s3", "") and not self.backend != "s3"
+        ):
+            raise InvalidConfigurationError(
+                "Mimir `backend` type must include a configuration block which matches that type"
+            )
+
+
+pydantic_dataclass(CommonConfig)
+
+
+class MimirBaseConfig(BaseModel):
+    target: str
+    memberlist: Memberlist
+    multitenancy_enabled: bool = True
+    common: CommonConfig
+    limits: Limits
+    blocks_storage: Optional[BlocksStorage]
+    distributor: Optional[Distributor]
+    ingester: Optional[Ingester]
+    ruler: Optional[Ruler]
+    alertmanager: Optional[Alertmanager]
+
+
 class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir Worker."""
 
@@ -54,8 +156,8 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         )
 
         self.framework.observe(
-            self.on.mimir_worker_pebble_ready, self._on_pebble_ready
-        )  # pyright: ignore
+            self.on.mimir_worker_pebble_ready, self._on_pebble_ready  # pyright: ignore
+        )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
     def _on_config_changed(self, event):
