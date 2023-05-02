@@ -22,7 +22,7 @@ def setup():
 
 def generate_scenario():
     return Scenario.from_events(
-        ("install", "config-changed", "start", Event("mimir-pebble-ready", workload=Mock()))
+        ("install", "config-changed", "start", Event("mimir-worker-pebble-ready", workload=Mock()))
     )(MimirWorkerK8SOperatorCharm)
 
 
@@ -31,16 +31,16 @@ def test_deploy_ok_scenario():
         "services": {
             "mimir": {
                 "override": "replace",
-                "summary": "mimir daemon",
-                "command": "/bin/mimir --config.file=/etc/mimir/mimir-config.yaml",
+                "summary": "mimir worker daemon",
+                "command": "/bin/mimir --config.file=/etc/mimir/mimir-config.yaml -target all,alertmanager",
                 "startup": "enabled",
             }
         },
     }
     cc = generate_scenario().play_until_complete()
-    assert cc[2].harness.get_container_pebble_plan("mimir").to_dict() == expected_plan
+    assert cc[2].harness.get_container_pebble_plan("mimir-worker").to_dict() == expected_plan
     assert (
-        cc[2].harness.model.unit.get_container("mimir").get_service("mimir").is_running() is True
+        cc[2].harness.model.unit.get_container("mimir-worker").get_service("mimir-worker").is_running() is True
     )
     assert cc[2].harness.charm.unit.status.name == "active"
 
