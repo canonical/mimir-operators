@@ -4,5 +4,4 @@ lightkube-models >= 1.22.0.4
 
 # Charm relation interfaces
 pydantic
-git+https://github.com/PietroPasotti/charm-relation-interfaces@mimir-worker
 

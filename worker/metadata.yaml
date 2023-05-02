@@ -17,7 +17,7 @@ provides:
     limit: 1
 
 containers:
-  mimir:
+  mimir-worker:
     resource: mimir-image
 
 resources:
