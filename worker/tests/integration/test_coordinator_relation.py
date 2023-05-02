@@ -3,16 +3,12 @@
 # See LICENSE file for licensing details.
 
 import asyncio
-import json
 import logging
 from types import SimpleNamespace
 
 import pytest
-import pytimeparse
-import yaml
-from helpers import get_address, oci_image
+from helpers import oci_image
 from pytest_operator.plugin import OpsTest
-from workload import Mimir
 
 logger = logging.getLogger(__name__)
 

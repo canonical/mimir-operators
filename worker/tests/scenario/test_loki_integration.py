@@ -40,7 +40,11 @@ def test_deploy_ok_scenario():
     cc = generate_scenario().play_until_complete()
     assert cc[2].harness.get_container_pebble_plan("mimir-worker").to_dict() == expected_plan
     assert (
-        cc[2].harness.model.unit.get_container("mimir-worker").get_service("mimir-worker").is_running() is True
+        cc[2]
+        .harness.model.unit.get_container("mimir-worker")
+        .get_service("mimir-worker")
+        .is_running()
+        is True
     )
     assert cc[2].harness.charm.unit.status.name == "active"
 
@@ -66,5 +70,6 @@ def test_deploy_and_cannot_push_scenario():
     cc = generate_scenario().play_until_complete()
     assert cc[2].harness.charm.unit.status.name == "blocked"
 
-def test_deploy_and_push_logs():
-    # if the loki endpoint is defined in relation data
+
+# def test_deploy_and_push_logs():
+# if the loki endpoint is defined in relation data
