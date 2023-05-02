@@ -53,7 +53,9 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             self, [ServicePort(self._http_listen_port, name=self.app.name)]
         )
 
-        self.framework.observe(self.on.mimir_worker_pebble_ready, self._on_pebble_ready)
+        self.framework.observe(
+            self.on.mimir_worker_pebble_ready, self._on_pebble_ready
+        )  # pyright: ignore
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
     def _on_config_changed(self, event):
@@ -73,8 +75,8 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     def _on_pebble_ready(self, event):
         # Temp: Please remove when a real config file is written.
         self._container.push(MIMIR_CONFIG, "", make_dirs=True)
-
-        self.unit.set_workload_version(self._mimir_version)
+        version = self._mimir_version or "None"
+        self.unit.set_workload_version(version)
         self._update_mimir_config()
         self._set_pebble_layer()
         self.restart()
