@@ -1,7 +1,7 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-name: mimir-worker-k8s-operator 
+name: mimir-worker-k8s 
 display-name: Mimir Charmed Operator
 summary: Mimir for Kubernetes clusters.
 description: |
