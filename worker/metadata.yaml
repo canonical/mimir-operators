@@ -12,7 +12,43 @@ source: https://github.com/canonical/mimir-worker-k8s-operator
 issues: https://github.com/canonical/mimir-worker-k8s-operator/issues
 
 provides:
-  mimir-worker:
+  mimir-compactor:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-distributor:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-ingester:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-querier:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-query-frontend:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-store-gateway:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-alertmanager:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-ruler:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-overrides-exporter:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-query-scheduler:
     interface: mimir_worker
     limit: 1
 
