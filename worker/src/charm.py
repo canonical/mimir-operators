@@ -15,8 +15,6 @@ https://discourse.charmhub.io/t/4208
 import logging
 import re
 from dataclasses import asdict, dataclass
-from pydantic import BaseModel
-from pydantic.dataclasses import dataclass as pydantic_dataclass
 from typing import List, Literal, Optional, Union
 
 import yaml
@@ -29,6 +27,8 @@ from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus
 from ops.pebble import PathError, ProtocolError
+from pydantic import BaseModel
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 MIMIR_CONFIG = "/etc/mimir/mimir-config.yaml"
 MIMIR_DIR = "/mimir"
@@ -211,11 +211,18 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
                 "mimir-worker": {
                     "override": "replace",
                     "summary": "mimir worker daemon",
-                    "command": f"/bin/mimir --config.file={MIMIR_CONFIG} -target {self.config.get('roles')}",
+                    "command": f"/bin/mimir --config.file={MIMIR_CONFIG} -target {','.join(self._mimir_roles)}",
                     "startup": "enabled",
                 }
             },
         }
+
+    @property
+    def _mimir_roles(self) -> List[str]:
+        """Return a set of the roles Mimir worker should take on."""
+        DEFAULT_ROLES = ["all", "alertmanager"]
+        roles = list(self.model.relations.keys())
+        return roles if roles else DEFAULT_ROLES
 
     @property
     def _mimir_version(self) -> Optional[str]:
