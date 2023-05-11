@@ -1,0 +1,63 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: mimir-worker-k8s 
+display-name: Mimir Charmed Operator
+summary: Mimir for Kubernetes clusters.
+description: |
+  Grafana Mimir is an open source software project that provides a scalable long-term storage for Prometheus.
+  This charm deploys and operates Mimir on Kubernetes clusters
+
+source: https://github.com/canonical/mimir-worker-k8s-operator
+issues: https://github.com/canonical/mimir-worker-k8s-operator/issues
+
+provides:
+  mimir-compactor:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-distributor:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-ingester:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-querier:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-query-frontend:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-store-gateway:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-alertmanager:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-ruler:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-overrides-exporter:
+    interface: mimir_worker
+    limit: 1
+
+  mimir-query-scheduler:
+    interface: mimir_worker
+    limit: 1
+
+containers:
+  mimir-worker:
+    resource: mimir-image
+
+resources:
+  mimir-image:
+    type: oci-image
+    description: OCI image for Grafana Mimir
+    upstream-source: docker.io/grafana/mimir:2.8.0
