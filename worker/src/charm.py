@@ -14,29 +14,29 @@ https://discourse.charmhub.io/t/4208
 
 import logging
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from typing import List, Literal, Optional, Union
 
 import yaml
-from charms.observability_libs.v0.juju_topology import JujuTopology
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-    ServicePort,
-)
+from lightkube.models.core_v1 import ServicePort
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus
+from ops.model import ActiveStatus, WaitingStatus
 from ops.pebble import PathError, ProtocolError
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
+from charms.observability_libs.v0.juju_topology import JujuTopology
+from charms.observability_libs.v1.kubernetes_service_patch import (
+    KubernetesServicePatch,
+)
+
+DEFAULT_ROLES = ["all", "alertmanager"]
 MIMIR_CONFIG = "/etc/mimir/mimir-config.yaml"
 MIMIR_DIR = "/mimir"
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
-
-VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 
 class InvalidConfigurationError(Exception):
@@ -106,7 +106,7 @@ _StorageBackend = Union[_S3StorageBackend, _FilesystemStorageBackend]
 _StorageKey = Union[Literal["filesystem"], Literal["s3"]]
 
 
-@dataclass
+@pydantic_dataclass
 class CommonConfig:
     backend: _StorageKey
     _StorageKey: _StorageBackend
@@ -115,14 +115,11 @@ class CommonConfig:
         if not asdict(self).get("s3", "") and not asdict(self).get("s3", ""):
             raise InvalidConfigurationError("Common storage configuration must specify a type!")
         elif (asdict(self).get("filesystem", "") and not self.backend != "filesystem") or (
-            asdict(self).get("s3", "") and not self.backend != "s3"
+                asdict(self).get("s3", "") and not self.backend != "s3"
         ):
             raise InvalidConfigurationError(
                 "Mimir `backend` type must include a configuration block which matches that type"
             )
-
-
-pydantic_dataclass(CommonConfig)
 
 
 class MimirBaseConfig(BaseModel):
@@ -159,9 +156,15 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             self.on.mimir_worker_pebble_ready, self._on_pebble_ready  # pyright: ignore
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.update_status, self._on_update_status)
+
+    def _on_update_status(self, _):
+        if not self._container.can_connect():
+            self.unit.status = WaitingStatus("Waiting for Pebble ready")
 
     def _on_config_changed(self, event):
         if not self._container.can_connect():
+            self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
 
         restart = any(
@@ -193,8 +196,8 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         new_layer = self._pebble_layer
 
         if (
-            "services" not in current_layer.to_dict()
-            or current_layer.services != new_layer["services"]
+                "services" not in current_layer.to_dict()
+                or current_layer.services != new_layer["services"]
         ):
             self._container.add_layer(self._name, new_layer, combine=True)
             return True
@@ -220,8 +223,8 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     @property
     def _mimir_roles(self) -> List[str]:
         """Return a set of the roles Mimir worker should take on."""
-        DEFAULT_ROLES = ["all", "alertmanager"]
-        roles = list(self.model.relations.keys())
+        # filter out of all possible relations those that actually are active
+        roles = [endpoint for endpoint, any_related in self.model.relations.items() if any_related]
         return roles if roles else DEFAULT_ROLES
 
     @property
