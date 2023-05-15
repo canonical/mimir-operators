@@ -18,6 +18,10 @@ from dataclasses import asdict
 from typing import List, Literal, Optional, Union
 
 import yaml
+from charms.observability_libs.v0.juju_topology import JujuTopology
+from charms.observability_libs.v1.kubernetes_service_patch import (
+    KubernetesServicePatch,
+)
 from lightkube.models.core_v1 import ServicePort
 from ops.charm import CharmBase
 from ops.main import main
@@ -25,11 +29,6 @@ from ops.model import ActiveStatus, WaitingStatus
 from ops.pebble import PathError, ProtocolError
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass as pydantic_dataclass
-
-from charms.observability_libs.v0.juju_topology import JujuTopology
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-)
 
 DEFAULT_ROLES = ["all", "alertmanager"]
 MIMIR_CONFIG = "/etc/mimir/mimir-config.yaml"
@@ -40,23 +39,33 @@ logger = logging.getLogger(__name__)
 
 
 class InvalidConfigurationError(Exception):
+    """Invalid configuration."""
+
     pass
 
 
 class Memberlist(BaseModel):
+    """Memberlist schema."""
+
     join_members: List[str]
 
 
 class Tsdb(BaseModel):
+    """Tsdb schema."""
+
     dir: str = "/data/ingester"
 
 
 class BlocksStorage(BaseModel):
+    """Blocks storage schema."""
+
     storage_prefix: str = "blocks"
     tsdb: Tsdb
 
 
 class Limits(BaseModel):
+    """Limits schema."""
+
     ingestion_rate: int = 0
     ingestion_burst_size: int = 0
     max_global_series_per_user: int = 0
@@ -65,27 +74,39 @@ class Limits(BaseModel):
 
 
 class Kvstore(BaseModel):
+    """Kvstore schema."""
+
     store: str = "memberlist"
 
 
 class Ring(BaseModel):
+    """Ring schema."""
+
     kvstore: Kvstore
 
 
 class Distributor(BaseModel):
+    """Distributor schema."""
+
     ring: Ring
 
 
 class Ingester(BaseModel):
+    """Ingester schema."""
+
     ring: Ring
 
 
 class Ruler(BaseModel):
+    """Ruler schema."""
+
     rule_path: str = "/data/ruler"
     alertmanager_url: Optional[str]
 
 
 class Alertmanager(BaseModel):
+    """Alertmanager schema."""
+
     data_dir: str = "/data/alertmanager"
     external_url: Optional[str]
 
@@ -108,6 +129,8 @@ _StorageKey = Union[Literal["filesystem"], Literal["s3"]]
 
 @pydantic_dataclass
 class CommonConfig:
+    """Common config schema."""
+
     backend: _StorageKey
     _StorageKey: _StorageBackend
 
@@ -115,7 +138,7 @@ class CommonConfig:
         if not asdict(self).get("s3", "") and not asdict(self).get("s3", ""):
             raise InvalidConfigurationError("Common storage configuration must specify a type!")
         elif (asdict(self).get("filesystem", "") and not self.backend != "filesystem") or (
-                asdict(self).get("s3", "") and not self.backend != "s3"
+            asdict(self).get("s3", "") and not self.backend != "s3"
         ):
             raise InvalidConfigurationError(
                 "Mimir `backend` type must include a configuration block which matches that type"
@@ -123,6 +146,8 @@ class CommonConfig:
 
 
 class MimirBaseConfig(BaseModel):
+    """Base class for mimir config schema."""
+
     target: str
     memberlist: Memberlist
     multitenancy_enabled: bool = True
@@ -196,8 +221,8 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         new_layer = self._pebble_layer
 
         if (
-                "services" not in current_layer.to_dict()
-                or current_layer.services != new_layer["services"]
+            "services" not in current_layer.to_dict()
+            or current_layer.services != new_layer["services"]
         ):
             self._container.add_layer(self._name, new_layer, combine=True)
             return True
