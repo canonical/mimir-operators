@@ -52,9 +52,17 @@ provides:
     interface: mimir_worker
     limit: 1
 
+storage:
+  data:
+    type: filesystem
+    description: Store config files for persistence across upgrades
+
 containers:
   mimir-worker:
     resource: mimir-image
+    mounts:
+      - storage: data
+        location: /etc/mimir
 
 resources:
   mimir-image:

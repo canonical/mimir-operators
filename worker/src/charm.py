@@ -14,6 +14,7 @@ https://discourse.charmhub.io/t/4208
 
 import logging
 import re
+import socket
 from dataclasses import asdict
 from typing import List, Literal, Optional, Union
 
@@ -25,7 +26,7 @@ from charms.observability_libs.v1.kubernetes_service_patch import (
 from lightkube.models.core_v1 import ServicePort
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, WaitingStatus
+from ops.model import ActiveStatus, Relation, WaitingStatus
 from ops.pebble import PathError, ProtocolError
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass as pydantic_dataclass
@@ -164,7 +165,6 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir Worker."""
 
     _name = "mimir-worker"
-    _http_listen_port = 9009
     _instance_addr = "127.0.0.1"
 
     def __init__(self, *args):
@@ -174,7 +174,10 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         self.topology = JujuTopology.from_charm(self)
 
         self.service_path = KubernetesServicePatch(
-            self, [ServicePort(self._http_listen_port, name=self.app.name)]
+            self,
+            [ServicePort(8080, name=self.app.name)]  # API endpoint for "all"
+            # TODO figure out metrics endpoints for all roles. For example, when mimir is started
+            #  with the alertmanager role, no ports are bound at all.
         )
 
         self.framework.observe(
@@ -182,6 +185,30 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.update_status, self._on_update_status)
+
+        self._mimir_relation_names = [
+            k for k in self.meta.provides.keys() if k.startswith("mimir-")
+        ]
+        for rel_name in self._mimir_relation_names:
+            self.framework.observe(
+                self.on[rel_name.replace("-", "_")].relation_joined, self._on_mimir_relation_joined
+            )
+
+        self.framework.observe(self.on.upgrade_charm, self._update_all_endpoint_urls)
+
+    def _on_mimir_relation_joined(self, event):
+        self._update_endpoint_url(event.relation)
+        self._update_config()
+        # TODO update config on departed too, which a bit trickier because the departing relation
+        #  is still listed.
+
+    def _update_endpoint_url(self, relation: Relation):
+        relation.data[self.unit]["api-endpoint"] = socket.getfqdn()  # TODO: add to schema
+
+    def _update_all_endpoint_urls(self, _):
+        for rel_name in self._mimir_relation_names:
+            for relation in self.model.relations.get(rel_name, []):
+                self._update_endpoint_url(relation)
 
     def _on_update_status(self, _):
         if not self._container.can_connect():
@@ -192,6 +219,10 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting for Pebble ready")
             return
 
+        self._update_config()
+
+    def _update_config(self):
+        """Updates config."""
         restart = any(
             [
                 self._update_mimir_config(),
@@ -203,13 +234,8 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             self.restart()
 
     def _on_pebble_ready(self, event):
-        # Temp: Please remove when a real config file is written.
-        self._container.push(MIMIR_CONFIG, "", make_dirs=True)
-        version = self._mimir_version or "None"
-        self.unit.set_workload_version(version)
-        self._update_mimir_config()
-        self._set_pebble_layer()
-        self.restart()
+        self.unit.set_workload_version(self._mimir_version or "")
+        self._update_config()
         self.unit.status = ActiveStatus()
 
     def _set_pebble_layer(self) -> bool:
@@ -248,9 +274,14 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     @property
     def _mimir_roles(self) -> List[str]:
         """Return a set of the roles Mimir worker should take on."""
-        # filter out of all possible relations those that actually are active
-        roles = [endpoint for endpoint, any_related in self.model.relations.items() if any_related]
-        return roles if roles else DEFAULT_ROLES
+        # Filter out of all possible relations those that actually are active
+        active_rel_names = [k for k in self._mimir_relation_names if self.model.relations.get(k)]
+        active_roles = [
+            rel[len("mimir-") :] for rel in active_rel_names if rel.startswith("mimir-")
+        ]
+        # TODO make sure that the list of active roles is a subset of valid roles
+        #  or drop the 'mimir-' prefix from relation names
+        return active_roles or DEFAULT_ROLES
 
     @property
     def _mimir_version(self) -> Optional[str]:
