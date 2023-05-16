@@ -8,6 +8,7 @@ show_missing = true
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
+asyncio_mode = "auto"
 
 # Formatting tools configuration
 [tool.black]
@@ -19,6 +20,7 @@ target-version = ["py38"]
 line-length = 99
 select = ["E", "W", "F", "C", "N", "D", "I001"]
 extend-ignore = [
+    "D105",  # Missing docstring in magic method
     "D203",
     "D204",
     "D213",

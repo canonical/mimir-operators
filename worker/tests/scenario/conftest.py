@@ -1,17 +1,18 @@
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 import pytest
-from scenario import ExecOutput, Context
-
 from charm import MimirWorkerK8SOperatorCharm
+from scenario import Context, ExecOutput
 
 
 @pytest.fixture(autouse=True)
 def patch_all():
     # with patch("charm.MimirWorkerK8SOperatorCharm._current_mimir_config", PropertyMock(return_value={})):
     # with patch("charm.MimirWorkerK8SOperatorCharm._set_alerts", Mock(return_value=True)):
-    with patch("charms.observability_libs.v1.kubernetes_service_patch.KubernetesServicePatch.__init__",
-               Mock(return_value=None)):
+    with patch(
+        "charms.observability_libs.v1.kubernetes_service_patch.KubernetesServicePatch.__init__",
+        Mock(return_value=None),
+    ):
         yield
 
 
