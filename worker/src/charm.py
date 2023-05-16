@@ -16,6 +16,7 @@ import logging
 import re
 import socket
 from dataclasses import asdict
+from pathlib import Path
 from typing import List, Literal, Optional, Union
 
 import yaml
@@ -170,14 +171,12 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
+        self._root_data_dir = Path(self.meta.containers["mimir-worker"].mounts["data"].location)
 
         self.topology = JujuTopology.from_charm(self)
 
         self.service_path = KubernetesServicePatch(
-            self,
-            [ServicePort(8080, name=self.app.name)]  # API endpoint for "all"
-            # TODO figure out metrics endpoints for all roles. For example, when mimir is started
-            #  with the alertmanager role, no ports are bound at all.
+            self, [ServicePort(8080, name=self.app.name)]  # Same API endpoint for all components
         )
 
         self.framework.observe(
@@ -318,13 +317,31 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         return False
 
     def _build_mimir_config(self) -> dict:
-        # TODO: Implement this!
-        return {}
+        """Build mimir config.
 
-    def _running_mimir_config(self) -> dict:
+        - Place all data dirs under a common root data dir, so files are persisted across upgrades.
+          Following the default names from official docs:
+          https://grafana.com/docs/mimir/latest/references/configuration-parameters/
+        """
+        return {
+            "alertmanager": {
+                "data_dir": str(self._root_data_dir / "data-alertmanager"),
+            },
+            "compactor": {
+                "data_dir": str(self._root_data_dir / "data-compactor"),
+            },
+            "blocks_storage": {
+                "bucket_store": {
+                    "sync_dir": str(self._root_data_dir / "tsdb-sync"),
+                },
+            },
+        }
+
+    def _running_mimir_config(self) -> Optional[dict]:
+        """Return the Mimir config as dict, or None if retrieval failed."""
         if not self._container.can_connect():
             logger.debug("Could not connect to Mimir container")
-            return {}
+            return None
 
         try:
             raw_current = self._container.pull(MIMIR_CONFIG).read()
@@ -335,7 +352,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
                 "a failure in retrieving the file: %s",
                 e,
             )
-            return {}
+            return None
 
     def restart(self):
         """Restart the pebble service or start if not already running."""

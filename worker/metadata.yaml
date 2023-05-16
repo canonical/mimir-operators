@@ -56,14 +56,14 @@ provides:
 storage:
   data:
     type: filesystem
-    description: Store config files for persistence across upgrades
+    description: Common storage point for all components
 
 containers:
   mimir-worker:
     resource: mimir-image
     mounts:
       - storage: data
-        location: /etc/mimir
+        location: /data
 
 resources:
   mimir-image:

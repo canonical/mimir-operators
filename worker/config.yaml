@@ -1,11 +1,4 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-options:
-  roles:
-    description: |
-      Configure which roles the worker takes as a comma-separated list of any subset of roles.
-
-      The individual roles are: "alertamanager", "compactor", "distributor", "ingester", "querier", "query-frontend", "store-gateway", "overrides-exporter", "query-scheduler", "ruler", "all".
-    default: "all,alertmanager"
-    type: string
+options: {}
