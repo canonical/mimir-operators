@@ -187,7 +187,16 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.update_status, self._on_update_status)
 
         self._mimir_relation_names = [
-            k for k in self.meta.provides.keys() if k.startswith("mimir-")
+            "compactor",
+            "distributor",
+            "ingester",
+            "querier",
+            "query-frontend",
+            "store-gateway",
+            "alertmanager",
+            "ruler",
+            "overrides-exporter",
+            "query-scheduler",
         ]
         for rel_name in self._mimir_relation_names:
             self.framework.observe(
@@ -276,12 +285,8 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         """Return a set of the roles Mimir worker should take on."""
         # Filter out of all possible relations those that actually are active
         active_rel_names = [k for k in self._mimir_relation_names if self.model.relations.get(k)]
-        active_roles = [
-            rel[len("mimir-") :] for rel in active_rel_names if rel.startswith("mimir-")
-        ]
-        # TODO make sure that the list of active roles is a subset of valid roles
-        #  or drop the 'mimir-' prefix from relation names
-        return active_roles or DEFAULT_ROLES
+        # Assuming relation names match exactly Mimir roles.
+        return sorted(active_rel_names) or DEFAULT_ROLES
 
     @property
     def _mimir_version(self) -> Optional[str]:

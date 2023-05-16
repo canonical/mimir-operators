@@ -12,43 +12,44 @@ source: https://github.com/canonical/mimir-worker-k8s-operator
 issues: https://github.com/canonical/mimir-worker-k8s-operator/issues
 
 provides:
-  mimir-compactor:
+  # Note: relation names match exactly Mimir's role names
+  compactor:
     interface: mimir_worker
     limit: 1
 
-  mimir-distributor:
+  distributor:
     interface: mimir_worker
     limit: 1
 
-  mimir-ingester:
+  ingester:
     interface: mimir_worker
     limit: 1
 
-  mimir-querier:
+  querier:
     interface: mimir_worker
     limit: 1
 
-  mimir-query-frontend:
+  query-frontend:
     interface: mimir_worker
     limit: 1
 
-  mimir-store-gateway:
+  store-gateway:
     interface: mimir_worker
     limit: 1
 
-  mimir-alertmanager:
+  alertmanager:
     interface: mimir_worker
     limit: 1
 
-  mimir-ruler:
+  ruler:
     interface: mimir_worker
     limit: 1
 
-  mimir-overrides-exporter:
+  overrides-exporter:
     interface: mimir_worker
     limit: 1
 
-  mimir-query-scheduler:
+  query-scheduler:
     interface: mimir_worker
     limit: 1
 

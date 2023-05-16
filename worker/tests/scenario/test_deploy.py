@@ -17,7 +17,7 @@ def test_update_status_cannot_connect(ctx, evt):
 
 
 @pytest.mark.parametrize(
-    "roles",
+    "relations",
     (
         ["alertmanager", "compactor"],
         ["alertmanager", "distributor"],
@@ -27,15 +27,13 @@ def test_update_status_cannot_connect(ctx, evt):
         ["alertmanager", "overrides-exporter", "ruler", "store-gateway"],  # order matters
     ),
 )
-def test_pebble_ready_plan(ctx, roles):
-    mimir_relations = tuple("mimir-" + roles for roles in roles)
-
+def test_pebble_ready_plan(ctx, relations):
     expected_plan = {
         "services": {
             "mimir-worker": {
                 "override": "replace",
                 "summary": "mimir worker daemon",
-                "command": f"/bin/mimir --config.file=/etc/mimir/mimir-config.yaml -target {','.join(roles)}",
+                "command": f"/bin/mimir --config.file=/etc/mimir/mimir-config.yaml -target {','.join(relations)}",
                 "startup": "enabled",
             }
         },
@@ -53,7 +51,7 @@ def test_pebble_ready_plan(ctx, roles):
             containers=[mimir_container],
             relations=[
                 Relation(endpoint, interface="mimir_worker", remote_app_name=f"{endpoint} app")
-                for endpoint in mimir_relations
+                for endpoint in relations
             ],
         ),
     )
