@@ -15,24 +15,26 @@ https://discourse.charmhub.io/t/4208
 import logging
 import re
 import socket
-from dataclasses import asdict
 from pathlib import Path
-from typing import List, Literal, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import yaml
+from charms.mimir_coordinator_k8s.v0.mimir_cluster import (
+    ConfigReceivedEvent,
+    MimirClusterRequirer,
+    MimirRole,
+)
 from charms.observability_libs.v0.juju_topology import JujuTopology
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
 )
 from lightkube.models.core_v1 import ServicePort
-from ops.charm import CharmBase
+from ops import pebble
+from ops.charm import CharmBase, CollectStatusEvent
 from ops.main import main
-from ops.model import ActiveStatus, Relation, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import PathError, ProtocolError
-from pydantic import BaseModel
-from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-DEFAULT_ROLES = ["all", "alertmanager"]
 MIMIR_CONFIG = "/etc/mimir/mimir-config.yaml"
 MIMIR_DIR = "/mimir"
 
@@ -40,197 +42,63 @@ MIMIR_DIR = "/mimir"
 logger = logging.getLogger(__name__)
 
 
-class InvalidConfigurationError(Exception):
-    """Invalid configuration."""
-
-    pass
-
-
-class Memberlist(BaseModel):
-    """Memberlist schema."""
-
-    join_members: List[str]
-
-
-class Tsdb(BaseModel):
-    """Tsdb schema."""
-
-    dir: str = "/data/ingester"
-
-
-class BlocksStorage(BaseModel):
-    """Blocks storage schema."""
-
-    storage_prefix: str = "blocks"
-    tsdb: Tsdb
-
-
-class Limits(BaseModel):
-    """Limits schema."""
-
-    ingestion_rate: int = 0
-    ingestion_burst_size: int = 0
-    max_global_series_per_user: int = 0
-    ruler_max_rules_per_rule_group: int = 0
-    ruler_max_rule_groups_per_tenant: int = 0
-
-
-class Kvstore(BaseModel):
-    """Kvstore schema."""
-
-    store: str = "memberlist"
-
-
-class Ring(BaseModel):
-    """Ring schema."""
-
-    kvstore: Kvstore
-
-
-class Distributor(BaseModel):
-    """Distributor schema."""
-
-    ring: Ring
-
-
-class Ingester(BaseModel):
-    """Ingester schema."""
-
-    ring: Ring
-
-
-class Ruler(BaseModel):
-    """Ruler schema."""
-
-    rule_path: str = "/data/ruler"
-    alertmanager_url: Optional[str]
-
-
-class Alertmanager(BaseModel):
-    """Alertmanager schema."""
-
-    data_dir: str = "/data/alertmanager"
-    external_url: Optional[str]
-
-
-class _S3StorageBackend(BaseModel):
-    endpoint: str
-    access_key_id: str
-    secret_access_key: str
-    insecure: bool = False
-    signature_version: str = "v4"
-
-
-class _FilesystemStorageBackend(BaseModel):
-    dir: str
-
-
-_StorageBackend = Union[_S3StorageBackend, _FilesystemStorageBackend]
-_StorageKey = Union[Literal["filesystem"], Literal["s3"]]
-
-
-@pydantic_dataclass
-class CommonConfig:
-    """Common config schema."""
-
-    backend: _StorageKey
-    _StorageKey: _StorageBackend
-
-    def __post_init__(self):
-        if not asdict(self).get("s3", "") and not asdict(self).get("s3", ""):
-            raise InvalidConfigurationError("Common storage configuration must specify a type!")
-        elif (asdict(self).get("filesystem", "") and not self.backend != "filesystem") or (
-            asdict(self).get("s3", "") and not self.backend != "s3"
-        ):
-            raise InvalidConfigurationError(
-                "Mimir `backend` type must include a configuration block which matches that type"
-            )
-
-
-class MimirBaseConfig(BaseModel):
-    """Base class for mimir config schema."""
-
-    target: str
-    memberlist: Memberlist
-    multitenancy_enabled: bool = True
-    common: CommonConfig
-    limits: Limits
-    blocks_storage: Optional[BlocksStorage]
-    distributor: Optional[Distributor]
-    ingester: Optional[Ingester]
-    ruler: Optional[Ruler]
-    alertmanager: Optional[Alertmanager]
-
-
 class MimirWorkerK8SOperatorCharm(CharmBase):
-    """A Juju Charmed Operator for Mimir Worker."""
+    """A Juju Charmed Operator for Mimir."""
 
-    _name = "mimir-worker"
+    _name = "mimir"
     _instance_addr = "127.0.0.1"
 
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._root_data_dir = Path(self.meta.containers["mimir-worker"].mounts["data"].location)
+        self._root_data_dir = Path(self.meta.containers["mimir"].mounts["data"].location)
 
         self.topology = JujuTopology.from_charm(self)
+        self.mimir_cluster = MimirClusterRequirer(self)
 
         self.service_path = KubernetesServicePatch(
             self, [ServicePort(8080, name=self.app.name)]  # Same API endpoint for all components
         )
 
         self.framework.observe(
-            self.on.mimir_worker_pebble_ready, self._on_pebble_ready  # pyright: ignore
+            self.on.mimir_pebble_ready, self._on_pebble_ready  # pyright: ignore
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.update_status, self._on_update_status)
 
-        self._mimir_relation_names = [
-            "compactor",
-            "distributor",
-            "ingester",
-            "querier",
-            "query-frontend",
-            "store-gateway",
-            "alertmanager",
-            "ruler",
-            "overrides-exporter",
-            "query-scheduler",
-        ]
-        for rel_name in self._mimir_relation_names:
-            self.framework.observe(
-                self.on[rel_name.replace("-", "_")].relation_joined, self._on_mimir_relation_joined
-            )
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(
+            self.mimir_cluster.on.config_received, self._on_mimir_config_received
+        )
+        self.framework.observe(self.mimir_cluster.on.created, self._on_mimir_cluster_created)
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
 
-        self.framework.observe(self.on.upgrade_charm, self._update_all_endpoint_urls)
+    def _on_mimir_cluster_created(self, _):
+        self._update_mimir_cluster()
 
-    def _on_mimir_relation_joined(self, event):
-        self._update_endpoint_url(event.relation)
+    def _update_mimir_cluster(self):
+        """Share via mimir-cluster all information we need to publish."""
+        self.mimir_cluster.publish_unit_address(socket.getfqdn())
+        if self.unit.is_leader() and self._mimir_roles:
+            logger.info(f"publishing roles: {self._mimir_roles}")
+            self.mimir_cluster.publish_app_roles(self._mimir_roles)
+
+    def _on_mimir_config_received(self, _e: ConfigReceivedEvent):
         self._update_config()
-        # TODO update config on departed too, which a bit trickier because the departing relation
-        #  is still listed.
 
-    def _update_endpoint_url(self, relation: Relation):
-        relation.data[self.unit]["api-endpoint"] = socket.getfqdn()  # TODO: add to schema
+    def _on_upgrade_charm(self, _):
+        self._update_mimir_cluster()
 
-    def _update_all_endpoint_urls(self, _):
-        for rel_name in self._mimir_relation_names:
-            for relation in self.model.relations.get(rel_name, []):
-                self._update_endpoint_url(relation)
+    def _on_config_changed(self, _):
+        # if the user has changed the roles, we might need to let the coordinator know
+        self._update_mimir_cluster()
 
-    def _on_update_status(self, _):
-        if not self._container.can_connect():
-            self.unit.status = WaitingStatus("Waiting for Pebble ready")
-
-    def _on_config_changed(self, event):
-        if not self._container.can_connect():
-            self.unit.status = WaitingStatus("Waiting for Pebble ready")
-            return
-
-        self._update_config()
+        # if we have a config, we can start mimir
+        if self.mimir_cluster.get_mimir_config():
+            # determine if a workload restart is necessary
+            self._update_config()
 
     def _update_config(self):
-        """Updates config."""
+        """Update the mimir config and restart the workload if necessary."""
         restart = any(
             [
                 self._update_mimir_config(),
@@ -244,13 +112,17 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     def _on_pebble_ready(self, event):
         self.unit.set_workload_version(self._mimir_version or "")
         self._update_config()
-        self.unit.status = ActiveStatus()
 
     def _set_pebble_layer(self) -> bool:
         """Set Pebble layer.
 
         Returns: True if Pebble layer was added, otherwise False.
         """
+        if not self._container.can_connect():
+            return False
+        if not self._mimir_roles:
+            return False
+
         current_layer = self._container.get_plan()
         new_layer = self._pebble_layer
 
@@ -258,7 +130,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             "services" not in current_layer.to_dict()
             or current_layer.services != new_layer["services"]
         ):
-            self._container.add_layer(self._name, new_layer, combine=True)
+            self._container.add_layer(self._name, new_layer, combine=True)  # pyright: ignore
             return True
 
         return False
@@ -266,26 +138,26 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     @property
     def _pebble_layer(self):
         """Return a dictionary representing a Pebble layer."""
+        targets = ",".join(sorted(self._mimir_roles))
+
         return {
             "summary": "mimir worker layer",
             "description": "pebble config layer for mimir worker",
             "services": {
-                "mimir-worker": {
+                "mimir": {
                     "override": "replace",
                     "summary": "mimir worker daemon",
-                    "command": f"/bin/mimir --config.file={MIMIR_CONFIG} -target {','.join(self._mimir_roles)}",
+                    "command": f"/bin/mimir --config.file={MIMIR_CONFIG} -target {targets}",
                     "startup": "enabled",
                 }
             },
         }
 
     @property
-    def _mimir_roles(self) -> List[str]:
-        """Return a set of the roles Mimir worker should take on."""
-        # Filter out of all possible relations those that actually are active
-        active_rel_names = [k for k in self._mimir_relation_names if self.model.relations.get(k)]
-        # Assuming relation names match exactly Mimir roles.
-        return sorted(active_rel_names) or DEFAULT_ROLES
+    def _mimir_roles(self) -> List[MimirRole]:
+        """Return a set of the roles this Mimir worker should take on."""
+        roles: List[MimirRole] = [role for role in MimirRole if self.config[role] is True]
+        return roles
 
     @property
     def _mimir_version(self) -> Optional[str]:
@@ -306,7 +178,12 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         Raises: BlockedStatusError exception if PebbleError, ProtocolError, PathError exceptions
             are raised by container.remove_path
         """
-        config = self._build_mimir_config()
+        mimir_config = self.mimir_cluster.get_mimir_config()
+        if not mimir_config:
+            logger.warning("cannot update mimir config: coordinator hasn't published one yet.")
+            return False
+
+        config = self._set_data_dirs(mimir_config)
 
         if self._running_mimir_config() != config:
             config_as_yaml = yaml.safe_dump(config)
@@ -316,26 +193,32 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
 
         return False
 
-    def _build_mimir_config(self) -> dict:
-        """Build mimir config.
+    def _set_data_dirs(self, config: Dict[str, Any]) -> dict:
+        """Set the data-dirs in the config we received from the coordinator.
 
         - Place all data dirs under a common root data dir, so files are persisted across upgrades.
           Following the default names from official docs:
           https://grafana.com/docs/mimir/latest/references/configuration-parameters/
         """
-        return {
-            "alertmanager": {
-                "data_dir": str(self._root_data_dir / "data-alertmanager"),
-            },
-            "compactor": {
-                "data_dir": str(self._root_data_dir / "data-compactor"),
-            },
-            "blocks_storage": {
-                "bucket_store": {
-                    "sync_dir": str(self._root_data_dir / "tsdb-sync"),
-                },
-            },
-        }
+        config = config.copy()
+        for key, folder in (
+            ("alertmanager", "data-alertmanager"),
+            ("compactor", "data-compactor"),
+        ):
+            if key not in config:
+                config[key] = {}
+            config[key]["data_dir"] = str(self._root_data_dir / folder)
+
+        # blocks_storage:
+        #   bucket_store:
+        #     sync_dir: /etc/mimir/tsdb-sync
+        #   data_dir: /data/tsdb-sync
+        if config.get("blocks_storage"):
+            config["blocks_storage"] = {
+                "bucket_store": {"sync_dir": str(self._root_data_dir / "tsdb-sync")}
+            }
+
+        return config
 
     def _running_mimir_config(self) -> Optional[dict]:
         """Return the Mimir config as dict, or None if retrieval failed."""
@@ -356,10 +239,32 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
 
     def restart(self):
         """Restart the pebble service or start if not already running."""
-        if self._container.get_service(self._name).is_running():
-            self._container.restart(self._name)
-        else:
-            self._container.start(self._name)
+        if not self._container.exists(MIMIR_CONFIG):
+            logger.error("cannot restart mimir: config file doesn't exist (yet).")
+
+        try:
+            if self._container.get_service(self._name).is_running():
+                self._container.restart(self._name)
+            else:
+                self._container.start(self._name)
+        except pebble.ChangeError as e:
+            logger.error(f"failed to (re)start mimir job: {e}", exc_info=True)
+            return
+
+    def _on_collect_status(self, e: CollectStatusEvent):
+        if not self._container.can_connect():
+            e.add_status(WaitingStatus("Waiting for `mimir` container"))
+        if not self.model.get_relation("mimir-cluster"):
+            e.add_status(
+                BlockedStatus("Missing mimir-cluster relation to a mimir-coordinator charm")
+            )
+        elif not self.mimir_cluster.relation:
+            e.add_status(WaitingStatus("Mimir-Cluster relation not ready"))
+        if not self.mimir_cluster.get_mimir_config():
+            e.add_status(WaitingStatus("Waiting for coordinator to publish a mimir config"))
+        if not self._mimir_roles:
+            e.add_status(BlockedStatus("No roles assigned: please configure some roles"))
+        e.add_status(ActiveStatus(""))
 
 
 if __name__ == "__main__":  # pragma: nocover

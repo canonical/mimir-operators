@@ -1,4 +1,78 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-options: {}
+# Comma-separated list of Mimir roles that this worker should fulfill.
+# Possible roles are:
+# - "query-scheduler"
+# - "query-frontend"
+# - "querier"
+# - "store-gateway"
+# - "ingester"
+# - "distributor"
+# - "ruler"
+# - "alertmanager"
+# - "compactor"
+# Note that for a mimir deployment to be valid, each one of these roles needs to be
+# assigned to at least one worker node.
+#
+# Additionally, you can assign these optional roles:
+# - "overrides-exporter"
+# - "flusher"
+#
+# These roles are optional in that they're not required for a mimir
+# deployment to function.
+#
+# Supported meta-roles:
+# - "all" (equivalent to all required roles)
+# # TODO
+# - "write" (equivalent to "distributor,ingester")
+# - "read" (equivalent to "query_frontend,querier")
+# - "backend" (equivalent to "store_gateway,compactor,ruler,alertmanager,query_scheduler,overrides_exporter")
+
+
+options:
+  overrides-exporter:
+    type: boolean
+    default: false
+  query-scheduler:
+    type: boolean
+    default: false
+  flusher:
+    type: boolean
+    default: false
+  query-frontend:
+    type: boolean
+    default: false
+  querier:
+    type: boolean
+    default: false
+  store-gateway:
+    type: boolean
+    default: false
+  ingester:
+    type: boolean
+    default: false
+  distributor:
+    type: boolean
+    default: false
+  ruler:
+    type: boolean
+    default: false
+  alertmanager:
+    type: boolean
+    default: false
+  compactor:
+    type: boolean
+    default: false
+  read:
+    type: boolean
+    default: false
+  write:
+    type: boolean
+    default: false
+  backend:
+    type: boolean
+    default: false
+  all:
+    type: boolean
+    default: false
