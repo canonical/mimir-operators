@@ -15,8 +15,7 @@ https://discourse.charmhub.io/t/4208
 import logging
 import re
 import socket
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import yaml
 from charms.mimir_coordinator_k8s.v0.mimir_cluster import (
@@ -51,7 +50,6 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
-        self._root_data_dir = Path(self.meta.containers["mimir"].mounts["data"].location)
 
         self.topology = JujuTopology.from_charm(self)
         self.mimir_cluster = MimirClusterRequirer(self)
@@ -183,42 +181,13 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             logger.warning("cannot update mimir config: coordinator hasn't published one yet.")
             return False
 
-        config = self._set_data_dirs(mimir_config)
-
-        if self._running_mimir_config() != config:
-            config_as_yaml = yaml.safe_dump(config)
+        if self._running_mimir_config() != mimir_config:
+            config_as_yaml = yaml.safe_dump(mimir_config)
             self._container.push(MIMIR_CONFIG, config_as_yaml, make_dirs=True)
             logger.info("Pushed new Mimir configuration")
             return True
 
         return False
-
-    def _set_data_dirs(self, config: Dict[str, Any]) -> dict:
-        """Set the data-dirs in the config we received from the coordinator.
-
-        - Place all data dirs under a common root data dir, so files are persisted across upgrades.
-          Following the default names from official docs:
-          https://grafana.com/docs/mimir/latest/references/configuration-parameters/
-        """
-        config = config.copy()
-        for key, folder in (
-            ("alertmanager", "data-alertmanager"),
-            ("compactor", "data-compactor"),
-        ):
-            if key not in config:
-                config[key] = {}
-            config[key]["data_dir"] = str(self._root_data_dir / folder)
-
-        # blocks_storage:
-        #   bucket_store:
-        #     sync_dir: /etc/mimir/tsdb-sync
-        #   data_dir: /data/tsdb-sync
-        if config.get("blocks_storage"):
-            config["blocks_storage"] = {
-                "bucket_store": {"sync_dir": str(self._root_data_dir / "tsdb-sync")}
-            }
-
-        return config
 
     def _running_mimir_config(self) -> Optional[dict]:
         """Return the Mimir config as dict, or None if retrieval failed."""

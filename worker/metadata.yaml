@@ -21,6 +21,10 @@ storage:
     type: filesystem
     description: Common storage point for all components
 
+# The Mimir coordinator has a hardcoded dependency on the mount location,
+# and it relies on this path to generate the configuration.
+# Any changes to this path may affect the coordinator's functionality.
+
 containers:
   mimir:
     resource: mimir-image
