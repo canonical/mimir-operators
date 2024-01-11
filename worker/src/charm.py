@@ -27,6 +27,8 @@ from charms.observability_libs.v0.juju_topology import JujuTopology
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
 )
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
+from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
 from lightkube.models.core_v1 import ServicePort
 from ops import pebble
 from ops.charm import CharmBase, CollectStatusEvent
@@ -41,6 +43,14 @@ MIMIR_DIR = "/mimir"
 logger = logging.getLogger(__name__)
 
 
+@trace_charm(
+    tracing_endpoint="tempo_endpoint",
+    extra_types=[
+        MimirClusterRequirer,
+        KubernetesServicePatch,
+    ],
+    # TODO add certificate file once TLS support is merged
+)
 class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 
@@ -57,6 +67,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         self.service_path = KubernetesServicePatch(
             self, [ServicePort(8080, name=self.app.name)]  # Same API endpoint for all components
         )
+        self.tracing = TracingEndpointRequirer(self)
 
         self.framework.observe(
             self.on.mimir_pebble_ready, self._on_pebble_ready  # pyright: ignore
@@ -234,6 +245,14 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         if not self._mimir_roles:
             e.add_status(BlockedStatus("No roles assigned: please configure some roles"))
         e.add_status(ActiveStatus(""))
+
+    @property
+    def tempo_endpoint(self) -> Optional[str]:
+        """Tempo endpoint for charm tracing."""
+        if self.tracing.is_ready():
+            return self.tracing.otlp_http_endpoint()
+        else:
+            return None
 
 
 if __name__ == "__main__":  # pragma: nocover
