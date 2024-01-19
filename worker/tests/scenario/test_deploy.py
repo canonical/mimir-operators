@@ -5,7 +5,7 @@ import json
 import pytest
 from charms.mimir_coordinator_k8s.v0.mimir_cluster import MimirClusterRequirerAppData, MimirRole
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from scenario import Container, Relation, State
+from scenario import Container, ExecOutput, Relation, State
 
 from tests.scenario.conftest import MIMIR_VERSION_EXEC_OUTPUT
 
@@ -20,11 +20,18 @@ def test_status_cannot_connect_no_relation(ctx, evt):
 
 @pytest.mark.parametrize("evt", ["update-status", "config-changed"])
 def test_status_cannot_connect(ctx, evt):
+    container = Container(
+        "mimir",
+        can_connect=False,
+        exec_mock={
+            ("update-ca-certificates", "--fresh"): ExecOutput(),
+        },
+    )
     state_out = ctx.run(
         evt,
         state=State(
             config={"ruler": True},
-            containers=[Container("mimir", can_connect=False)],
+            containers=[container],
             relations=[Relation("mimir-cluster")],
         ),
     )
@@ -69,9 +76,11 @@ def test_pebble_ready_plan(ctx, roles):
     mimir_container = Container(
         "mimir",
         can_connect=True,
-        exec_mock={("/bin/mimir", "-version"): MIMIR_VERSION_EXEC_OUTPUT},
+        exec_mock={
+            ("/bin/mimir", "-version"): MIMIR_VERSION_EXEC_OUTPUT,
+            ("update-ca-certificates", "--fresh"): ExecOutput(),
+        },
     )
-
     state_out = ctx.run(
         mimir_container.pebble_ready_event,
         state=State(

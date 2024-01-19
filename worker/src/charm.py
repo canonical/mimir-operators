@@ -12,13 +12,20 @@ develop a new k8s charm using the Operator Framework:
 https://discourse.charmhub.io/t/4208
 """
 
+import json
 import logging
 import re
 import socket
+import subprocess
+from pathlib import Path
 from typing import List, Optional
 
 import yaml
 from charms.mimir_coordinator_k8s.v0.mimir_cluster import (
+    MIMIR_CERT_FILE,
+    MIMIR_CLIENT_CA_FILE,
+    MIMIR_CONFIG_FILE,
+    MIMIR_KEY_FILE,
     ConfigReceivedEvent,
     MimirClusterRequirer,
     MimirRole,
@@ -36,7 +43,6 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import PathError, ProtocolError
 
-MIMIR_CONFIG = "/etc/mimir/mimir-config.yaml"
 MIMIR_DIR = "/mimir"
 
 # Log messages can be retrieved using juju debug-log
@@ -110,6 +116,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         """Update the mimir config and restart the workload if necessary."""
         restart = any(
             [
+                self._update_tls_certificates(),
                 self._update_mimir_config(),
                 self._set_pebble_layer(),
             ]
@@ -118,7 +125,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         if restart:
             self.restart()
 
-    def _on_pebble_ready(self, event):
+    def _on_pebble_ready(self, _):
         self.unit.set_workload_version(self._mimir_version or "")
         self._update_config()
 
@@ -156,7 +163,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
                 "mimir": {
                     "override": "replace",
                     "summary": "mimir worker daemon",
-                    "command": f"/bin/mimir --config.file={MIMIR_CONFIG} -target {targets}",
+                    "command": f"/bin/mimir --config.file={MIMIR_CONFIG_FILE} -target {targets}",
                     "startup": "enabled",
                 }
             },
@@ -180,6 +187,44 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             return result.group(1)
         return None
 
+    def _update_tls_certificates(self) -> bool:
+        if not self._container.can_connect():
+            return False
+
+        ca_cert_path = Path("/usr/local/share/ca-certificates/ca.crt")
+
+        if cert_secrets := self.mimir_cluster.get_cert_secret_ids():
+            cert_secrets = json.loads(cert_secrets)
+
+            private_key_secret = self.model.get_secret(id=cert_secrets["private_key_secret_id"])
+            private_key = private_key_secret.get_content().get("private-key")
+
+            ca_server_secret = self.model.get_secret(id=cert_secrets["ca_server_cert_secret_id"])
+            ca_cert = ca_server_secret.get_content().get("ca-cert")
+            server_cert = ca_server_secret.get_content().get("server-cert")
+
+            # Save the workload certificates
+            self._container.push(MIMIR_CERT_FILE, server_cert or "", make_dirs=True)
+            self._container.push(MIMIR_KEY_FILE, private_key or "", make_dirs=True)
+            self._container.push(MIMIR_CLIENT_CA_FILE, ca_cert or "", make_dirs=True)
+            self._container.push(ca_cert_path, ca_cert or "", make_dirs=True)
+
+            self._container.exec(["update-ca-certificates", "--fresh"]).wait()
+            subprocess.run(["update-ca-certificates", "--fresh"])
+
+            return True
+        else:
+            self._container.remove_path(MIMIR_CERT_FILE, recursive=True)
+            self._container.remove_path(MIMIR_KEY_FILE, recursive=True)
+            self._container.remove_path(MIMIR_CLIENT_CA_FILE, recursive=True)
+            self._container.remove_path(ca_cert_path, recursive=True)
+
+            ca_cert_path.unlink(missing_ok=True)
+            self._container.exec(["update-ca-certificates", "--fresh"]).wait()
+            subprocess.run(["update-ca-certificates", "--fresh"])
+
+            return True
+
     def _update_mimir_config(self) -> bool:
         """Set Mimir config.
 
@@ -194,7 +239,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
 
         if self._running_mimir_config() != mimir_config:
             config_as_yaml = yaml.safe_dump(mimir_config)
-            self._container.push(MIMIR_CONFIG, config_as_yaml, make_dirs=True)
+            self._container.push(MIMIR_CONFIG_FILE, config_as_yaml, make_dirs=True)
             logger.info("Pushed new Mimir configuration")
             return True
 
@@ -207,7 +252,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             return None
 
         try:
-            raw_current = self._container.pull(MIMIR_CONFIG).read()
+            raw_current = self._container.pull(MIMIR_CONFIG_FILE).read()
             return yaml.safe_load(raw_current)
         except (ProtocolError, PathError) as e:
             logger.warning(
@@ -219,7 +264,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
 
     def restart(self):
         """Restart the pebble service or start if not already running."""
-        if not self._container.exists(MIMIR_CONFIG):
+        if not self._container.exists(MIMIR_CONFIG_FILE):
             logger.error("cannot restart mimir: config file doesn't exist (yet).")
 
         try:
