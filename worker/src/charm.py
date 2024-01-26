@@ -18,9 +18,10 @@ import re
 import socket
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import yaml
+from charms.loki_k8s.v1.loki_push_api import _PebbleLogClient
 from charms.mimir_coordinator_k8s.v0.mimir_cluster import (
     MIMIR_CERT_FILE,
     MIMIR_CLIENT_CA_FILE,
@@ -30,15 +31,16 @@ from charms.mimir_coordinator_k8s.v0.mimir_cluster import (
     MimirClusterRequirer,
     MimirRole,
 )
-from charms.observability_libs.v0.juju_topology import JujuTopology
 from charms.observability_libs.v1.kubernetes_service_patch import (
     KubernetesServicePatch,
 )
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
+from cosl import JujuTopology
 from lightkube.models.core_v1 import ServicePort
 from ops import pebble
 from ops.charm import CharmBase, CollectStatusEvent
+from ops.framework import BoundEvent, Object
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import PathError, ProtocolError
@@ -70,7 +72,14 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
 
         self.topology = JujuTopology.from_charm(self)
         self.mimir_cluster = MimirClusterRequirer(self)
-
+        self.log_forwarder = ManualLogForwarder(
+            charm=self,
+            loki_endpoints=self.mimir_cluster.get_loki_endpoints(),
+            refresh_events=[
+                self.on["mimir-cluster"].relation_joined,
+                self.on["mimir-cluster"].relation_changed,
+            ],
+        )
         self.service_path = KubernetesServicePatch(
             self, [ServicePort(8080, name=self.app.name)]  # Same API endpoint for all components
         )
@@ -80,13 +89,20 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             self.on.mimir_pebble_ready, self._on_pebble_ready  # pyright: ignore
         )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
+
+        # Mimir Cluster
         self.framework.observe(
             self.mimir_cluster.on.config_received, self._on_mimir_config_received
         )
         self.framework.observe(self.mimir_cluster.on.created, self._on_mimir_cluster_created)
-        self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
+        self.framework.observe(
+            self.on.mimir_cluster_relation_departed, self.log_forwarder.disable_logging
+        )
+        self.framework.observe(
+            self.on.mimir_cluster_relation_broken, self.log_forwarder.disable_logging
+        )
 
     def _on_mimir_cluster_created(self, _):
         self._update_mimir_cluster()
@@ -268,6 +284,10 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         if not self._container.exists(MIMIR_CONFIG_FILE):
             logger.error("cannot restart mimir: config file doesn't exist (yet).")
 
+        if not self._mimir_roles:
+            logger.debug("cannot restart mimir: no roles have been configured.")
+            return
+
         try:
             if self._container.get_service(self._name).is_running():
                 self._container.restart(self._name)
@@ -304,6 +324,56 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     def server_cert_path(self) -> Optional[str]:
         """Server certificate path for tls tracing."""
         return MIMIR_CERT_FILE
+
+
+class ManualLogForwarder(Object):
+    """Forward the standard outputs of all workloads to explictly-provided Loki endpoints."""
+
+    def __init__(
+        self,
+        charm: CharmBase,
+        *,
+        loki_endpoints: Optional[Dict[str, str]],
+        refresh_events: Optional[List[BoundEvent]] = None,
+    ):
+        _PebbleLogClient.check_juju_version()
+        super().__init__(charm, "mimir-cluster")
+        self._charm = charm
+        self._loki_endpoints = loki_endpoints
+        self._topology = JujuTopology.from_charm(charm)
+
+        if not refresh_events:
+            return
+
+        for event in refresh_events:
+            self.framework.observe(event, self.update_logging)
+
+    def update_logging(self, _=None):
+        """Update the log forwarding to match the active Loki endpoints."""
+        loki_endpoints = self._loki_endpoints
+
+        if not loki_endpoints:
+            logger.warning("No Loki endpoints available")
+            loki_endpoints = {}
+
+        for container in self._charm.unit.containers.values():
+            _PebbleLogClient.disable_inactive_endpoints(
+                container=container,
+                active_endpoints=loki_endpoints,
+                topology=self._topology,
+            )
+            _PebbleLogClient.enable_endpoints(
+                container=container, active_endpoints=loki_endpoints, topology=self._topology
+            )
+
+    def disable_logging(self, _=None):
+        """Disable all log forwarding."""
+        # This is currently necessary because, after a relation broken, the charm can still see
+        # the Loki endpoints in the relation data.
+        for container in self._charm.unit.containers.values():
+            _PebbleLogClient.disable_inactive_endpoints(
+                container=container, active_endpoints={}, topology=self._topology
+            )
 
 
 if __name__ == "__main__":  # pragma: nocover

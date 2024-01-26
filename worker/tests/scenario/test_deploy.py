@@ -89,7 +89,9 @@ def test_pebble_ready_plan(ctx, roles):
             relations=[
                 Relation(
                     "mimir-cluster",
-                    remote_app_data={"mimir_config": json.dumps({"alive": "beef"})},
+                    remote_app_data={
+                        "mimir_config": json.dumps({"alive": "beef"}),
+                    },
                 )
             ],
         ),
