@@ -47,4 +47,4 @@ resources:
   mimir-image:
     type: oci-image
     description: OCI image for Grafana Mimir
-    upstream-source: docker.io/ubuntu/mimir:2-22.04_stable
+    upstream-source: docker.io/ubuntu/mimir:2-22.04
