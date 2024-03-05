@@ -61,7 +61,7 @@ and three optional arguments.
   Subsequently, a Loki charm may instantiate the `LokiPushApiProvider` in its constructor as
   follows:
 
-      from charms.loki_k8s.v0.loki_push_api import LokiPushApiProvider
+      from charms.loki_k8s.v1.loki_push_api import LokiPushApiProvider
       from loki_server import LokiServer
       ...
 
@@ -167,7 +167,7 @@ instantiating it, typically in the constructor of your charm (the one which
 sends logs).
 
 ```python
-from charms.loki_k8s.v0.loki_push_api import LokiPushApiConsumer
+from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
 
 class LokiClientCharm(CharmBase):
 
@@ -387,9 +387,10 @@ requires:
    optional: true
 ```
 
-Once the library is implemented in a charm and a logging relation (loki_push_api) is
-active and healthy, the library will inject a Pebble layer in the workload container
-to configure Pebble's log forwarding feature and start sending logs to Loki.
+Once the LogForwader class is implemented in your charm and the relation (implementing the
+`loki_push_api` interface) is active and healthy, the library will inject a Pebble layer in
+each workload container the charm has access to, to configure Pebble's log forwarding
+feature and start sending logs to Loki.
 
 ## Alerting Rules
 
@@ -517,7 +518,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 4
 
 logger = logging.getLogger(__name__)
 
@@ -798,7 +799,11 @@ class AlertRules:
                         alert_rule["labels"] = {}
 
                     if self.topology:
-                        alert_rule["labels"].update(self.topology.label_matcher_dict)
+                        # only insert labels that do not already exist
+                        for label, val in self.topology.label_matcher_dict.items():
+                            if label not in alert_rule["labels"]:
+                                alert_rule["labels"][label] = val
+
                         # insert juju topology filters into a prometheus alert rule
                         # logql doesn't like empty matchers, so add a job matcher which hits
                         # any string as a "wildcard" which the topology labels will
@@ -2088,7 +2093,21 @@ class LogProxyConsumer(ConsumerBase):
                - "binsha": sha256 sum of unpacked promtail binary
             container: container into which promtail is to be uploaded.
         """
-        with request.urlopen(promtail_info["url"]) as r:
+        # Check for Juju proxy variables and fall back to standard ones if not set
+        proxies: Optional[Dict[str, str]] = {}
+        if proxies and os.environ.get("JUJU_CHARM_HTTP_PROXY"):
+            proxies.update({"http": os.environ["JUJU_CHARM_HTTP_PROXY"]})
+        if proxies and os.environ.get("JUJU_CHARM_HTTPS_PROXY"):
+            proxies.update({"https": os.environ["JUJU_CHARM_HTTPS_PROXY"]})
+        if proxies and os.environ.get("JUJU_CHARM_NO_PROXY"):
+            proxies.update({"no_proxy": os.environ["JUJU_CHARM_NO_PROXY"]})
+        else:
+            proxies = None
+
+        proxy_handler = request.ProxyHandler(proxies)
+        opener = request.build_opener(proxy_handler)
+
+        with opener.open(promtail_info["url"]) as r:
             file_bytes = r.read()
             file_path = os.path.join(BINARY_DIR, promtail_info["filename"] + ".gz")
             with open(file_path, "wb") as f:

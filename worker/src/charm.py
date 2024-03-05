@@ -22,7 +22,14 @@ from typing import Dict, List, Optional
 
 import yaml
 from charms.loki_k8s.v1.loki_push_api import _PebbleLogClient
-from charms.mimir_coordinator_k8s.v0.mimir_cluster import (
+from charms.observability_libs.v1.kubernetes_service_patch import (
+    KubernetesServicePatch,
+)
+from charms.tempo_k8s.v1.charm_tracing import trace_charm
+from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
+from cosl import JujuTopology
+from lightkube.models.core_v1 import ServicePort
+from mimir_cluster import (
     MIMIR_CERT_FILE,
     MIMIR_CLIENT_CA_FILE,
     MIMIR_CONFIG_FILE,
@@ -31,13 +38,6 @@ from charms.mimir_coordinator_k8s.v0.mimir_cluster import (
     MimirClusterRequirer,
     MimirRole,
 )
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-)
-from charms.tempo_k8s.v1.charm_tracing import trace_charm
-from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
-from cosl import JujuTopology
-from lightkube.models.core_v1 import ServicePort
 from ops import pebble
 from ops.charm import CharmBase, CollectStatusEvent
 from ops.framework import BoundEvent, Object

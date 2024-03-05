@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from charms.mimir_coordinator_k8s.v0.mimir_cluster import MimirClusterRequirerAppData, MimirRole
+from mimir_cluster import MimirClusterRequirerAppData, MimirRole
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from scenario import Container, ExecOutput, Relation, State
 
