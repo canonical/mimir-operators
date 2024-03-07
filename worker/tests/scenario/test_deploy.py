@@ -67,7 +67,7 @@ def test_pebble_ready_plan(ctx, roles):
             "mimir": {
                 "override": "replace",
                 "summary": "mimir worker daemon",
-                "command": f"/bin/mimir --config.file=/etc/mimir/mimir-config.yaml -target {','.join(sorted(roles))}",
+                "command": f"/bin/mimir --config.file=/etc/mimir/mimir-config.yaml -target {','.join(sorted(roles))} -auth.multitenancy-enabled=false",
                 "startup": "enabled",
             }
         },
