@@ -1,5 +1,3 @@
-from unittest.mock import Mock, patch
-
 import pytest
 from charm import MimirWorkerK8SOperatorCharm
 from scenario import Context, ExecOutput
@@ -9,11 +7,7 @@ from scenario import Context, ExecOutput
 def patch_all():
     # with patch("charm.MimirWorkerK8SOperatorCharm._current_mimir_config", PropertyMock(return_value={})):
     # with patch("charm.MimirWorkerK8SOperatorCharm._set_alerts", Mock(return_value=True)):
-    with patch(
-        "charms.observability_libs.v1.kubernetes_service_patch.KubernetesServicePatch.__init__",
-        Mock(return_value=None),
-    ):
-        yield
+    yield
 
 
 @pytest.fixture

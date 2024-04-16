@@ -22,13 +22,9 @@ from typing import Dict, List, Optional
 
 import yaml
 from charms.loki_k8s.v1.loki_push_api import _PebbleLogClient
-from charms.observability_libs.v1.kubernetes_service_patch import (
-    KubernetesServicePatch,
-)
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from charms.tempo_k8s.v1.tracing import TracingEndpointRequirer
 from cosl import JujuTopology
-from lightkube.models.core_v1 import ServicePort
 from mimir_cluster import (
     MIMIR_CERT_FILE,
     MIMIR_CLIENT_CA_FILE,
@@ -56,7 +52,6 @@ logger = logging.getLogger(__name__)
     server_cert="server_cert_path",
     extra_types=[
         MimirClusterRequirer,
-        KubernetesServicePatch,
     ],
     # TODO add certificate file once TLS support is merged
 )
@@ -69,6 +64,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._container = self.unit.get_container(self._name)
+        self.unit.open_port(protocol="tcp", port=8080)
 
         self.topology = JujuTopology.from_charm(self)
         self.mimir_cluster = MimirClusterRequirer(self)
@@ -79,9 +75,6 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
                 self.on["mimir-cluster"].relation_joined,
                 self.on["mimir-cluster"].relation_changed,
             ],
-        )
-        self.service_path = KubernetesServicePatch(
-            self, [ServicePort(8080, name=self.app.name)]  # Same API endpoint for all components
         )
         self.tracing = TracingEndpointRequirer(self)
 
