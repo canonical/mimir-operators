@@ -31,48 +31,113 @@
 
 
 options:
-  overrides-exporter:
+  # Mimir roles
+  role-compactor:
+    description: >
+      The compactor increases query performance and reduces long-term storage
+      usage by combining blocks. This deduplicates chunks and reduces the size
+      of the index, resulting in reduced storage costs. Querying fewer blocks
+      is faster, so it also increases query speed.
     type: boolean
     default: false
-  query-scheduler:
+  role-distributor:
+    description: >
+      The distributor is a stateless component that receives time-series data
+      from Prometheus or the Grafana agent. It validates the data for
+      correctness and ensures that it is within the configured limits for a
+      given tenant. The distributor then divides the data into batches and
+      sends it to multiple ingesters in parallel.
     type: boolean
     default: false
-  flusher:
+  role-ingester:
+    description: >
+      The ingester is a stateful component that writes incoming series to
+      long-term storage on the write path and returns series samples for
+      queries on the read path.
     type: boolean
     default: false
-  query-frontend:
+  role-querier:
+    description: >
+      The querier is a stateless component that evaluates PromQL expressions
+      by fetching time series and labels on the read path.
+      The querier uses the store-gateway component to query the long-term 
+      storage and the ingester component to query recently written data.
     type: boolean
     default: false
-  querier:
+  role-query-frontend:
+    description: >
+      The query-frontend is a stateless component that provides the same API 
+      as the querier and can be used to accelerate the read path.
+      When you deploy the query-frontend, you should make query requests to
+      the query-frontend instead of the queriers.
     type: boolean
     default: false
-  store-gateway:
+  role-store-gateway:
+    description: >
+      The store-gateway component, which is stateful, queries blocks from
+      long-term storage. On the read path, the querier and the ruler use the
+      store-gateway when handling the query, whether the query comes from a
+      user or from when a rule is being evaluated.
     type: boolean
     default: false
-  ingester:
+  role-alertmanager:
+    description: >
+      The Mimir Alertmanager is a component that accepts alert notifications
+      from the Mimir ruler.
     type: boolean
     default: false
-  distributor:
+  role-overrides-exporter:
+    description: >
+      Grafana Mimir supports applying overrides on a per-tenant basis. A number
+      of overrides configure limits that prevent a single tenant from using too
+      many resources. The overrides-exporter component exposes limits as
+      Prometheus metrics so that operators can understand how close tenants are
+      to their limits.
     type: boolean
     default: false
-  ruler:
+  role-query-scheduler:
+    description: >
+      The query-scheduler is an optional, stateless component that retains a
+      queue of queries to execute, and distributes the workload to available
+      queriers.
     type: boolean
     default: false
-  alertmanager:
+  role-ruler:
+    description: >
+      The ruler is an optional component that evaluates PromQL expressions 
+      defined in recording and alerting rules. Each tenant has a set of 
+      recording and alerting rules and can group those rules into namespaces.
     type: boolean
     default: false
-  compactor:
+  role-flusher:
+    description: >
+      Flusher is designed to be used as a job to flush the data from the WAL on
+      disk. Flusher works with both chunks-based and blocks-based ingesters.
     type: boolean
     default: false
-  read:
+  role-read:
+    description: >
+      Meta-role that includes the Mimir components that belong to the "read 
+      path". It enables query-frontend and querier.
     type: boolean
     default: false
-  write:
+  role-write:
+    description: >
+      Meta-role that includes the Mimir components that belong to the "write
+      path". It enables distributor and ingester.
     type: boolean
     default: false
-  backend:
+  role-backend:
+    description: >
+      Meta-role that includes the Mimir components that belong to the "backend
+      path". It enables store-gateway, compactor, ruler, alertmanager, 
+      query-scheduler, and overrides-exporter.
     type: boolean
     default: false
-  all:
+  role-all:
+    description: >
+      Meta-role that can be used to run a worker in monolithic mode. It enables
+      compactor, distributor, ingester, querier, query-frontend, ruler and
+      store-gateway.
     type: boolean
     default: false

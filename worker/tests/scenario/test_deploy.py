@@ -30,7 +30,7 @@ def test_status_cannot_connect(ctx, evt):
     state_out = ctx.run(
         evt,
         state=State(
-            config={"ruler": True},
+            config={"role-ruler": True},
             containers=[container],
             relations=[Relation("mimir-cluster")],
         ),
@@ -84,7 +84,7 @@ def test_pebble_ready_plan(ctx, roles):
     state_out = ctx.run(
         mimir_container.pebble_ready_event,
         state=State(
-            config={role: True for role in roles},
+            config={f"role-{role}": True for role in roles},
             containers=[mimir_container],
             relations=[
                 Relation(
@@ -131,7 +131,7 @@ def test_roles(ctx, roles_config, expected):
         "config-changed",
         state=State(
             leader=True,
-            config={x: True for x in roles_config.split(",")},
+            config={f"role-{x}": True for x in roles_config.split(",")},
             containers=[Container("mimir", can_connect=True)],
             relations=[Relation("mimir-cluster")],
         ),

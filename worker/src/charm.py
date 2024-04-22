@@ -182,7 +182,9 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     @property
     def _mimir_roles(self) -> List[MimirRole]:
         """Return a set of the roles this Mimir worker should take on."""
-        roles: List[MimirRole] = [role for role in MimirRole if self.config[role] is True]
+        roles: List[MimirRole] = [
+            role for role in MimirRole if self.config[f"role-{role.value}"] is True
+        ]
         return roles
 
     @property
