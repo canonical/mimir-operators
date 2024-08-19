@@ -29,7 +29,6 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 
     _name = "mimir"
-    _instance_addr = "127.0.0.1"
     _mimir_port = 8080
 
     def __init__(self, *args):
@@ -39,6 +38,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             name="mimir",
             pebble_layer=self.pebble_layer,
             endpoints={"cluster": "mimir-cluster"},
+            readiness_check_endpoint=f"http://localhost:{self._mimir_port}/ready",
         )
         self._charm_tracing_endpoint, self._charm_tracing_cert = self.worker.charm_tracing_config()
 
