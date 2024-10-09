@@ -13,6 +13,9 @@ https://discourse.charmhub.io/t/4208
 """
 
 import logging
+import re
+import socket
+from typing import Optional
 
 from charms.tempo_k8s.v1.charm_tracing import trace_charm
 from cosl.coordinated_workers.worker import CONFIG_FILE, Worker
@@ -38,12 +41,48 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             name="mimir",
             pebble_layer=self.pebble_layer,
             endpoints={"cluster": "mimir-cluster"},
-            readiness_check_endpoint=f"http://localhost:{self._mimir_port}/ready",
+            readiness_check_endpoint=self.readiness_check_endpoint,
         )
         self._charm_tracing_endpoint, self._charm_tracing_cert = self.worker.charm_tracing_config()
 
         self._container = self.model.unit.get_container(self._name)
         self.unit.set_ports(self._mimir_port)
+
+        # === EVENT HANDLER REGISTRATION === #
+        self.framework.observe(
+            self.on.mimir_pebble_ready,  # pyright: ignore
+            self._on_pebble_ready,
+        )
+
+    # === EVENT HANDLERS === #
+
+    def _on_pebble_ready(self, _):
+        self.unit.set_workload_version(
+            self.version or ""  # pyright: ignore[reportOptionalMemberAccess]
+        )
+
+    # === PROPERTIES === #
+
+    @property
+    def version(self) -> Optional[str]:
+        """Return Mimir workload version."""
+        if not self._container.can_connect():
+            return None
+
+        version_output, _ = self._container.exec(["/bin/mimir", "-version"]).wait_output()
+        # Output looks like this:
+        # Mimir, version 2.4.0 (branch: HEAD, revision 32137ee)
+        if result := re.search(r"[Vv]ersion:?\s*(\S+)", version_output):
+            return result.group(1)
+        return None
+
+    # === UTILITY METHODS === #
+
+    @staticmethod
+    def readiness_check_endpoint(worker: Worker) -> str:
+        """Endpoint for worker readiness checks."""
+        scheme = "https" if worker.cluster.get_tls_data() else "http"
+        return f"{scheme}://{socket.getfqdn()}:{MimirWorkerK8SOperatorCharm._mimir_port}/ready"
 
     def pebble_layer(self, worker: Worker) -> Layer:
         """Return a dictionary representing a Pebble layer."""

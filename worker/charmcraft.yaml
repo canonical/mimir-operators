@@ -18,9 +18,7 @@ parts:
       - libffi-dev
       - libssl-dev
       - pkg-config
-      - rustc
-      - cargo
 
-#    To speed up packing in dev environments:
-#    charm-binary-python-packages:
-#      - pydantic>2.0
+    charm-binary-python-packages:
+     - pydantic>2.0
+     - pydantic-core
