@@ -27,7 +27,11 @@ from ops.pebble import Layer
 logger = logging.getLogger(__name__)
 
 
-@trace_charm(tracing_endpoint="_charm_tracing_endpoint", server_cert="_charm_tracing_cert")
+@trace_charm(
+    tracing_endpoint="_charm_tracing_endpoint",
+    server_cert="_charm_tracing_cert",
+    extra_types=[Worker],
+)
 class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 
@@ -88,6 +92,21 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         """Return a dictionary representing a Pebble layer."""
         targets = ",".join(sorted(worker.roles))
 
+        # configure workload traces
+        env = {}
+        if tempo_endpoint := worker.cluster.get_workload_tracing_receivers().get(
+            "jaeger_thrift_http", None
+        ):
+            topology = worker.cluster.juju_topology
+            env.update(
+                {
+                    "JAEGER_ENDPOINT": (f"{tempo_endpoint}/api/traces?format=jaeger.thrift"),
+                    "JAEGER_SAMPLER_PARAM": "1",
+                    "JAEGER_SAMPLER_TYPE": "const",
+                    "JAEGER_TAGS": f"juju_application={topology.application},juju_model={topology.model}"
+                    + f",juju_model_uuid={topology.model_uuid},juju_unit={topology.unit},juju_charm={topology.charm_name}",
+                },
+            )
         return Layer(
             {
                 "summary": "mimir worker layer",
@@ -98,6 +117,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
                         "summary": "mimir worker daemon",
                         "command": f"/bin/mimir --config.file={CONFIG_FILE} -target {targets} -auth.multitenancy-enabled=false",
                         "startup": "enabled",
+                        "environment": env,
                     }
                 },
             }
