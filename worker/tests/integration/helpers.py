@@ -8,6 +8,7 @@ from juju.application import Application
 from juju.unit import Unit
 from minio import Minio
 from pytest_operator.plugin import OpsTest
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,7 @@ def charm_resources(metadata_file="metadata.yaml") -> Dict[str, str]:
     return resources
 
 
-async def configure_minio(ops_test: OpsTest):
-    bucket_name = "mimir"
+async def configure_minio(ops_test: OpsTest, bucket_name="mimir"):
     minio_leader_unit_number = await get_leader_unit_number(ops_test, "minio")
     minio_addr = await get_unit_address(ops_test, "minio", minio_leader_unit_number)
     mc_client = Minio(
@@ -37,14 +37,13 @@ async def configure_minio(ops_test: OpsTest):
         mc_client.make_bucket(bucket_name)
 
 
-async def configure_s3_integrator(ops_test: OpsTest):
+async def configure_s3_integrator(ops_test: OpsTest, bucket_name="mimir", s3_app="s3"):
     assert ops_test.model is not None
-    bucket_name = "mimir"
     config = {
         "access-key": "access",
         "secret-key": "secretsecret",
     }
-    s3_integrator_app: Application = ops_test.model.applications["s3"]  # type: ignore
+    s3_integrator_app: Application = ops_test.model.applications[s3_app]  # type: ignore
     s3_integrator_leader: Unit = s3_integrator_app.units[0]
 
     await s3_integrator_app.set_config(
@@ -145,3 +144,69 @@ async def get_traefik_proxied_endpoints(
     action = await traefik_leader.run_action("show-proxied-endpoints")
     action_result = await action.wait()
     return json.loads(action_result.results["proxied-endpoints"])
+
+
+async def deploy_tempo_cluster(ops_test: OpsTest):
+    """Deploys tempo in its HA version together with minio and s3-integrator."""
+    tempo_app = "tempo"
+    worker_app = "tempo-worker"
+    s3_app = "s3-tempo"
+    tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", "edge"
+    tempo_coordinator_charm_url, coordinator_channel = "tempo-coordinator-k8s", "edge"
+    await ops_test.model.deploy(
+        tempo_worker_charm_url, application_name=worker_app, channel=worker_channel, trust=True
+    )
+    await ops_test.model.deploy(
+        tempo_coordinator_charm_url,
+        application_name=tempo_app,
+        channel=coordinator_channel,
+        trust=True,
+    )
+
+    await ops_test.model.deploy("s3-integrator", channel="edge", application_name=s3_app)
+
+    await ops_test.model.integrate(f"{tempo_app}:s3", f"{s3_app}:s3-credentials")
+    await ops_test.model.integrate(f"{tempo_app}:tempo-cluster", f"{worker_app}:tempo-cluster")
+
+    await configure_minio(ops_test, bucket_name="tempo")
+    await ops_test.model.wait_for_idle(apps=[s3_app], status="blocked")
+    await configure_s3_integrator(ops_test, bucket_name="tempo", s3_app=s3_app)
+
+    async with ops_test.fast_forward():
+        await ops_test.model.wait_for_idle(
+            apps=[tempo_app, worker_app, s3_app],
+            status="active",
+            timeout=2000,
+            idle_period=30,
+        )
+
+
+def get_traces(tempo_host: str, service_name="tracegen-otlp_http", tls=True):
+    """Get traces directly from Tempo REST API."""
+    url = f"{'https' if tls else 'http'}://{tempo_host}:3200/api/search?tags=service.name={service_name}"
+    req = requests.get(
+        url,
+        verify=False,
+    )
+    assert req.status_code == 200
+    traces = json.loads(req.text)["traces"]
+    return traces
+
+
+@retry(stop=stop_after_attempt(15), wait=wait_exponential(multiplier=1, min=4, max=10))
+async def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tls=True):
+    """Get traces directly from Tempo REST API, but also try multiple times.
+
+    Useful for cases when Tempo might not return the traces immediately (its API is known for returning data in
+    random order).
+    """
+    traces = get_traces(tempo_host, service_name=service_name, tls=tls)
+    assert len(traces) > 0
+    return traces
+
+
+async def get_application_ip(ops_test: OpsTest, app_name: str) -> str:
+    """Get the application IP address."""
+    status = await ops_test.model.get_status()
+    app = status["applications"][app_name]
+    return app.public_address
