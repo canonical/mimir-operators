@@ -24,7 +24,6 @@ requires:
     interface: mimir_cluster
     limit: 1
 
-
 storage:
   data:
     type: filesystem

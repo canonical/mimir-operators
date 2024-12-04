@@ -10,15 +10,31 @@ bases:
     - name: ubuntu
       channel: "22.04"
 
-
 parts:
   charm:
+    build-snaps:
+      - astral-uv
     build-packages:
       - git
       - libffi-dev
       - libssl-dev
       - pkg-config
-
     charm-binary-python-packages:
      - pydantic>2.0
      - pydantic-core
+    override-build: |
+      make requirements
+      craftctl default
+    # charm-requirements defaults to requirements.txt, but without setting it (counter-intuitive) 
+    # the charm does not respect the requirements.txt when generated dynamically during build.
+    charm-requirements: [requirements.txt]
+    prime:
+      - -*.charm
+      - -.venv
+      - -CONTRIBUTING.md
+      - -Makefile
+      - -pyproject.toml
+      - -README.md
+      - -tests/
+      - -uv.lock
+      - -*.egg-info
