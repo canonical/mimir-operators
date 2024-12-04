@@ -38,7 +38,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     _name = "mimir"
     _mimir_port = 8080
 
-    def __init__(self, *args):
+    def __init__(self, *args):  # type: ignore
         super().__init__(*args)
         self.worker = Worker(
             charm=self,
