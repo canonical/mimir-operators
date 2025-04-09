@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest, worker_charm: str):
     """Build the charm-under-test and deploy it together with related charms."""
+    assert ops_test.model
     # deploy charms of interest
     await asyncio.gather(
         ops_test.model.deploy("mimir-coordinator-k8s", APP_NAME, channel="latest/edge"),

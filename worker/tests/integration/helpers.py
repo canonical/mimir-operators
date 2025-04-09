@@ -13,7 +13,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 logger = logging.getLogger(__name__)
 
 
-def charm_resources(metadata_file="metadata.yaml") -> Dict[str, str]:
+def charm_resources(metadata_file="charmcraft.yaml") -> Dict[str, str]:
     with open(metadata_file, "r") as file:
         metadata = yaml.safe_load(file)
     resources = {}
@@ -62,6 +62,7 @@ async def get_leader_unit_number(ops_test: OpsTest, app_name: str) -> int:
 
     Raises an exception if no leader is found.
     """
+    assert ops_test.model
     status = await ops_test.model.get_status()
     app = status["applications"][app_name]
     if app is None:
@@ -148,6 +149,7 @@ async def get_traefik_proxied_endpoints(
 
 async def deploy_tempo_cluster(ops_test: OpsTest):
     """Deploys tempo in its HA version together with minio and s3-integrator."""
+    assert ops_test.model
     tempo_app = "tempo"
     worker_app = "tempo-worker"
     s3_app = "s3-tempo"
@@ -207,6 +209,7 @@ async def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tl
 
 async def get_application_ip(ops_test: OpsTest, app_name: str) -> str:
     """Get the application IP address."""
+    assert ops_test.model
     status = await ops_test.model.get_status()
     app = status["applications"][app_name]
     return app.public_address

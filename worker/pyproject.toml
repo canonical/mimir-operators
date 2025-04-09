@@ -1,15 +1,13 @@
 [project]
 name = "mimir-worker-k8s"
-version = "0.0"  # this is in fact irrelevant
-requires-python = "==3.10.*"  # https://packages.ubuntu.com/jammy/python3
+version = "0.0"
+requires-python = "~=3.10"  # https://packages.ubuntu.com/jammy/python3
 
 dependencies = [
     "ops>=1.5.0",
-    # Charm relation interfaces
-    "pydantic",
-    
-    # ---PYDEPS---
     "cosl>=0.0.43",
+    # Charm relation interfaces
+    "pydantic>2.0",
     # lib/charms/tempo_coordinator_k8s/v0/charm_tracing.py
     "opentelemetry-exporter-otlp-proto-http==1.21.0",
 ]
@@ -45,6 +43,7 @@ log_cli_level = "INFO"
 markers = [
   'setup: marks tests as setup (deselect with -m "not setup")'
 ]
+addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 
 # Linting tools configuration
 [tool.ruff]
@@ -73,22 +72,14 @@ per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.ruff.lint.mccabe]
-max-complexity = 15
-
-[tool.ruff.lint.pep8-naming]
-# Allow Pydantic's `@validator` decorator to trigger class method treatment.
-classmethod-decorators = ["classmethod", "pydantic.validator"]
-
 [tool.ruff.format]
 docstring-code-format = true
 
 [tool.pyright]
-include = ["src"]
-extraPaths = ["lib"]
+extraPaths = ["src", "lib"]
+pythonVersion = "3.10"
 pythonPlatform = "Linux"
-reportUnknownParameterType = true
 
 [tool.codespell]
-skip = ".git,build,.venv"
+skip = ".git,.tox,build,venv*"
 ignore-words-list = "assertIn,aNULL"
