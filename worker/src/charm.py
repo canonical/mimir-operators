@@ -13,6 +13,7 @@ https://discourse.charmhub.io/t/4208
 """
 
 import logging
+import os
 import re
 import socket
 from typing import Optional
@@ -92,8 +93,16 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
         """Return a dictionary representing a Pebble layer."""
         targets = ",".join(sorted(worker.roles))
 
-        # configure workload traces
         env = {}
+        # add proxy variables
+        env.update(
+            {
+                "https_proxy": os.environ.get("JUJU_CHARM_HTTPS_PROXY", ""),
+                "http_proxy": os.environ.get("JUJU_CHARM_HTTP_PROXY", ""),
+                "no_proxy": os.environ.get("JUJU_CHARM_NO_PROXY", ""),
+            }
+        )
+        # configure workload traces
         if tempo_endpoint := worker.cluster.get_workload_tracing_receivers().get(
             "jaeger_thrift_http", None
         ):
