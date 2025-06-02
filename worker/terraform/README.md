@@ -33,8 +33,8 @@ Upon applied, the module exports the following outputs:
 ## Usage
 
 > [!NOTE]
-> This module is intended to be used only in conjunction with its counterpart, [Tempo coordinator module](https://github.com/canonical/mimir-coordinator-k8s-operator) and, when deployed in isolation, is not functional.
-> For the Tempo HA solution module deployment, check [Mimir HA module](https://github.com/canonical/observability)
+> This module is intended to be used only in conjunction with its counterpart, the [Mimir coordinator module](https://github.com/canonical/mimir-coordinator-k8s-operator) and, when deployed in isolation, is not functional.
+> For the Mimir HA solution module deployment, check [Mimir HA module](https://github.com/canonical/observability)
 
 Users should ensure that Terraform is aware of the `juju_model` dependency of the charm module.
 
