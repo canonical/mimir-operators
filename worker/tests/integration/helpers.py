@@ -153,8 +153,8 @@ async def deploy_tempo_cluster(ops_test: OpsTest):
     tempo_app = "tempo"
     worker_app = "tempo-worker"
     s3_app = "s3-tempo"
-    tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", "edge"
-    tempo_coordinator_charm_url, coordinator_channel = "tempo-coordinator-k8s", "edge"
+    tempo_worker_charm_url, worker_channel = "tempo-worker-k8s", "2/edge"
+    tempo_coordinator_charm_url, coordinator_channel = "tempo-coordinator-k8s", "2/edge"
     await ops_test.model.deploy(
         tempo_worker_charm_url, application_name=worker_app, channel=worker_channel, trust=True
     )

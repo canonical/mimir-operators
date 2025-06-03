@@ -30,11 +30,11 @@ async def test_build_and_deploy(ops_test: OpsTest):
     """Build the charm-under-test and deploy it together with related charms."""
     assert ops_test.model is not None  # for pyright
     await asyncio.gather(
-        ops_test.model.deploy("mimir-coordinator-k8s", "mimir", channel="latest/edge"),
-        ops_test.model.deploy("prometheus-k8s", "prometheus", channel="latest/edge", trust=True),
-        ops_test.model.deploy("loki-k8s", "loki", channel="latest/edge", trust=True),
-        ops_test.model.deploy("grafana-k8s", "grafana", channel="latest/edge", trust=True),
-        ops_test.model.deploy("grafana-agent-k8s", "agent", channel="latest/edge"),
+        ops_test.model.deploy("mimir-coordinator-k8s", "mimir", channel="2/edge", trust=True),
+        ops_test.model.deploy("prometheus-k8s", "prometheus", channel="2/edge", trust=True),
+        ops_test.model.deploy("loki-k8s", "loki", channel="2/edge", trust=True),
+        ops_test.model.deploy("grafana-k8s", "grafana", channel="2/edge", trust=True),
+        ops_test.model.deploy("grafana-agent-k8s", "agent", channel="2/edge"),
         ops_test.model.deploy("traefik-k8s", "traefik", channel="latest/edge", trust=True),
         # Deploy and configure Minio and S3
         # Secret must be at least 8 characters: https://github.com/canonical/minio-operator/issues/137
@@ -67,6 +67,7 @@ async def test_deploy_workers(ops_test: OpsTest, worker_charm: str):
         config={"role-read": True},
         resources=charm_resources(),
         num_units=3,
+        trust=True,
     )
     await ops_test.model.deploy(
         worker_charm,
@@ -74,6 +75,7 @@ async def test_deploy_workers(ops_test: OpsTest, worker_charm: str):
         config={"role-write": True},
         resources=charm_resources(),
         num_units=3,
+        trust=True,
     )
     await ops_test.model.deploy(
         worker_charm,
@@ -81,6 +83,7 @@ async def test_deploy_workers(ops_test: OpsTest, worker_charm: str):
         config={"role-backend": True},
         resources=charm_resources(),
         num_units=3,
+        trust=True,
     )
     await ops_test.model.wait_for_idle(
         apps=["worker-read", "worker-write", "worker-backend"], status="blocked"

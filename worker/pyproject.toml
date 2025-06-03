@@ -6,9 +6,9 @@ requires-python = "~=3.10"  # https://packages.ubuntu.com/jammy/python3
 dependencies = [
     "ops>=1.5.0",
     # FIXME: use cosl from pypi
-    "cosl@git+https://github.com/canonical/cos-lib@migrate-coord-workers",
+    "cosl>=1.0",
     # FIXME: use coordinated-worker from pypi
-    "coordinated-workers@git+https://github.com/canonical/cos-coordinated-workers@migrate-coord-workers",
+    "coordinated-workers",
     # Charm relation interfaces
     "pydantic>2.0",
     # lib/charms/tempo_coordinator_k8s/v0/charm_tracing.py

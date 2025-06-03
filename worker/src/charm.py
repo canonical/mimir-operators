@@ -14,10 +14,9 @@ https://discourse.charmhub.io/t/4208
 
 import logging
 import os
-import re
 import socket
-from typing import Optional
 
+import tenacity
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from coordinated_workers.worker import CONFIG_FILE, Worker
 from ops.charm import CharmBase
@@ -28,6 +27,9 @@ from ops.pebble import Layer
 logger = logging.getLogger(__name__)
 
 
+_LEGACY_WORKER_PORTS = [8080]
+
+
 @trace_charm(
     tracing_endpoint="_charm_tracing_endpoint",
     server_cert="_charm_tracing_cert",
@@ -36,50 +38,44 @@ logger = logging.getLogger(__name__)
 class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 
-    _name = "mimir"
+    container_name = "mimir"
     _mimir_port = 8080
 
     def __init__(self, *args):  # type: ignore
         super().__init__(*args)
+        # Override waiting times from the generic worker
+        Worker.SERVICE_START_RETRY_STOP = tenacity.stop_after_delay(60)
+        Worker.SERVICE_START_RETRY_WAIT = tenacity.wait_fixed(5)
+
         self.worker = Worker(
             charm=self,
-            name="mimir",
+            # name of the container the worker is operating on AND of the executable
+            name=self.container_name,
             pebble_layer=self.pebble_layer,
             endpoints={"cluster": "mimir-cluster"},
             readiness_check_endpoint=self.readiness_check_endpoint,
+            resources_requests=lambda _: {"cpu": "50m", "memory": "200Mi"},
+            # container we want to resource-patch
+            container_name=self.container_name,
         )
         self._charm_tracing_endpoint, self._charm_tracing_cert = self.worker.charm_tracing_config()
 
-        self._container = self.model.unit.get_container(self._name)
-        self.unit.set_ports(self._mimir_port)
+        self._container = self.model.unit.get_container(self.container_name)
 
-        # === EVENT HANDLER REGISTRATION === #
-        self.framework.observe(
-            self.on.mimir_pebble_ready,  # pyright: ignore
-            self._on_pebble_ready,
-        )
-
-    # === EVENT HANDLERS === #
-
-    def _on_pebble_ready(self, _):
-        self.unit.set_workload_version(
-            self.version or ""  # pyright: ignore[reportOptionalMemberAccess]
-        )
-
-    # === PROPERTIES === #
-
-    @property
-    def version(self) -> Optional[str]:
-        """Return Mimir workload version."""
-        if not self._container.can_connect():
-            return None
-
-        version_output, _ = self._container.exec(["/bin/mimir", "-version"]).wait_output()
-        # Output looks like this:
-        # Mimir, version 2.4.0 (branch: HEAD, revision 32137ee)
-        if result := re.search(r"[Vv]ersion:?\s*(\S+)", version_output):
-            return result.group(1)
-        return None
+        # if the worker has received some ports from the coordinator,
+        # it's in charge of ensuring they're opened.
+        if not self.worker.cluster.get_worker_ports():
+            # legacy behaviour fallback: older interface versions didn't tell us which
+            # ports we should be opening, so we opened all of them.
+            # This can happen when talking to an old coordinator revision, or
+            # if the coordinator hasn't published its data yet.
+            logger.info(
+                "Cluster interface hasn't published a list of worker ports (yet?). "
+                "If this issue persists after the cluster has settled, you should "
+                "upgrade the coordinator to a newer revision. Falling back now to "
+                "legacy behaviour and opening all ports."
+            )
+            self.unit.set_ports(*_LEGACY_WORKER_PORTS)
 
     # === UTILITY METHODS === #
 
