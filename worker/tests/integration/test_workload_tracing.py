@@ -35,7 +35,7 @@ async def test_build_and_deploy(ops_test: OpsTest, worker_charm: str):
     assert ops_test.model
     # deploy charms of interest
     await asyncio.gather(
-        ops_test.model.deploy("mimir-coordinator-k8s", APP_NAME, channel="2/edge"),
+        ops_test.model.deploy("mimir-coordinator-k8s", APP_NAME, channel="2/edge", trust=True),
         ops_test.model.deploy(
             worker_charm,
             APP_WORKER_NAME,
