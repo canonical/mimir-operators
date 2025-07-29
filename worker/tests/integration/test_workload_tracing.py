@@ -72,7 +72,7 @@ async def test_build_and_deploy(ops_test: OpsTest, worker_charm: str):
     )
 
 
-@pytest.mark.abort_on_fail
+@pytest.mark.skip("tracing-relation-joined fails - https://github.com/canonical/cos-coordinated-workers/issues/19")
 async def test_workload_traces(ops_test):
     # integrate workload-tracing only to not affect search results with charm traces
     await ops_test.model.integrate(f"{APP_NAME}:workload-tracing", f"{TEMPO_APP_NAME}:tracing")

@@ -17,7 +17,6 @@ import os
 import socket
 
 import tenacity
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from coordinated_workers.worker import CONFIG_FILE, Worker
 from ops.charm import CharmBase
 from ops.main import main
@@ -30,11 +29,7 @@ logger = logging.getLogger(__name__)
 _LEGACY_WORKER_PORTS = [8080]
 
 
-@trace_charm(
-    tracing_endpoint="_charm_tracing_endpoint",
-    server_cert="_charm_tracing_cert",
-    extra_types=[Worker],
-)
+
 class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 
@@ -58,7 +53,6 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             # container we want to resource-patch
             container_name=self.container_name,
         )
-        self._charm_tracing_endpoint, self._charm_tracing_cert = self.worker.charm_tracing_config()
 
         self._container = self.model.unit.get_container(self.container_name)
 
