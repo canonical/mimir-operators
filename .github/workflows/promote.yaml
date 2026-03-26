@@ -10,6 +10,12 @@ on:
           - edge -> beta
           - beta -> candidate
           - candidate -> stable
+      charm:
+        type: choice
+        description: Charm to promote
+        options:
+          - coordinator
+          - worker
 
 jobs:
   promote:
@@ -17,4 +23,5 @@ jobs:
     uses: canonical/observability/.github/workflows/charm-promote.yaml@v1
     with:
       promotion: ${{ github.event.inputs.promotion }}
+      charm-path: ${{ github.event.inputs.charm }}
     secrets: inherit

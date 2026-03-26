@@ -4,9 +4,11 @@ on:
     workflow_dispatch:
     schedule:
     - cron: "0 0 * * 1"  # Runs at midnight UTC every Monday
-
 jobs:
-    tics:
-        name: TiCs
+    tiobe-scan:
+        name: TiCs-scan
         uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@v1
+        with:
+            coverage-folder: .cover
+            tiobe-project-name: mimir-operators
         secrets: inherit

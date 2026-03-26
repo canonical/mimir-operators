@@ -2,6 +2,10 @@
 
 To make contributions to this charm, you'll need a working [development setup](https://juju.is/docs/sdk/dev-setup).
 
+This repository contains two charms:
+- **coordinator** (`coordinator/`): The Mimir coordinator charm
+- **worker** (`worker/`): The Mimir worker charm
+
 You can use the environments created by `tox` for development:
 
 ```shell
@@ -27,7 +31,6 @@ tox                  # runs 'lint' and 'unit' environments
 Build the charm in this git repository using:
 
 ```shell
+cd coordinator  # or cd worker
 charmcraft pack
 ```
-
-<!-- You may want to include any contribution/style guidelines in this document>
