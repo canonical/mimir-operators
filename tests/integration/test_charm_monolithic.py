@@ -4,9 +4,9 @@
 
 # pyright: reportAttributeAccessIssue=false
 
-import asyncio
 import logging
 
+import jubilant
 import pytest
 import requests
 from helpers import (
@@ -20,115 +20,87 @@ from helpers import (
     query_exemplars,
     query_mimir_from_client_localhost,
 )
-from pytest_operator.plugin import OpsTest
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.setup
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest, mimir_charm: str, cos_channel):
+def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     """Build the charm-under-test and deploy it together with related charms."""
-    assert ops_test.model is not None  # for pyright
-    await asyncio.gather(
-        ops_test.model.deploy(mimir_charm, "mimir", resources=charm_resources(), trust=True, config={"max_global_exemplars_per_user": 100000}),
-        ops_test.model.deploy("prometheus-k8s", "prometheus", channel=cos_channel, trust=True),
-        ops_test.model.deploy("loki-k8s", "loki", channel=cos_channel, trust=True),
-        ops_test.model.deploy("grafana-k8s", "grafana", channel=cos_channel, trust=True),
-        ops_test.model.deploy("grafana-agent-k8s", "agent", channel=cos_channel),
-        ops_test.model.deploy("traefik-k8s", "traefik", channel="latest/edge", trust=True),
-        ops_test.model.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel),
-        # Deploy and configure Minio and S3
-        # Secret must be at least 8 characters: https://github.com/canonical/minio-operator/issues/137
-        ops_test.model.deploy(
-            "minio",
-            channel="ckf-1.9/stable",
-            config={"access-key": "access", "secret-key": "secretsecret"},
-        ),
-        ops_test.model.deploy("s3-integrator", "s3", channel="latest/stable"),
+    juju.deploy(mimir_charm, "mimir", resources=charm_resources(), trust=True, config={"max_global_exemplars_per_user": 100000})
+    juju.deploy("prometheus-k8s", "prometheus", channel=cos_channel, trust=True)
+    juju.deploy("loki-k8s", "loki", channel=cos_channel, trust=True)
+    juju.deploy("grafana-k8s", "grafana", channel=cos_channel, trust=True)
+    juju.deploy("grafana-agent-k8s", "agent", channel=cos_channel)
+    juju.deploy("traefik-k8s", "traefik", channel="latest/edge", trust=True)
+    juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
+    # Secret must be at least 8 characters: https://github.com/canonical/minio-operator/issues/137
+    juju.deploy(
+        "minio",
+        channel="ckf-1.9/stable",
+        config={"access-key": "access", "secret-key": "secretsecret"},
     )
-    await ops_test.model.wait_for_idle(apps=["minio"], status="active")
-    await ops_test.model.wait_for_idle(apps=["s3"], status="blocked")
-    await configure_minio(ops_test)
-    await configure_s3_integrator(ops_test)
+    juju.deploy("s3-integrator", "s3", channel="latest/stable")
 
-    await ops_test.model.wait_for_idle(
-        apps=["prometheus", "loki", "grafana", "minio", "s3", "otelcol"], status="active"
-    )
-    await ops_test.model.wait_for_idle(
-        apps=["mimir", "agent"],
-        status="blocked",
+    juju.wait(lambda s: jubilant.all_active(s, "minio"), timeout=1000)
+    juju.wait(lambda s: jubilant.all_blocked(s, "s3"), timeout=1000)
+    configure_minio(juju)
+    configure_s3_integrator(juju)
+
+    juju.wait(
+        lambda s: jubilant.all_active(s, "prometheus", "loki", "grafana", "minio", "s3", "otelcol"),
         timeout=1000,
     )
+    juju.wait(lambda s: jubilant.all_blocked(s, "mimir", "agent"), timeout=1000)
 
 
-@pytest.mark.setup
 @pytest.mark.abort_on_fail
-async def test_deploy_workers(ops_test: OpsTest, cos_channel):
+def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     """Deploy the Mimir workers."""
-    assert ops_test.model is not None
-    await ops_test.model.deploy(
+    juju.deploy(
         "mimir-worker-k8s",
         "worker",
         channel=cos_channel,
         config={"role-all": True, "role-query-frontend": True},
         trust=True,
     )
-    await ops_test.model.wait_for_idle(
-        apps=["worker"],
-        status="blocked",
-        timeout=1000,
-    )
+    juju.wait(lambda s: jubilant.all_blocked(s, "worker"), timeout=1000)
 
 
-@pytest.mark.setup
 @pytest.mark.abort_on_fail
-async def test_integrate(ops_test: OpsTest):
-    assert ops_test.model is not None
-    await asyncio.gather(
-        ops_test.model.integrate("mimir:s3", "s3"),
-        ops_test.model.integrate("mimir:mimir-cluster", "worker"),
-        ops_test.model.integrate("mimir:self-metrics-endpoint", "prometheus"),
-        ops_test.model.integrate("mimir:grafana-dashboards-provider", "grafana"),
-        ops_test.model.integrate("mimir:grafana-source", "grafana"),
-        ops_test.model.integrate("mimir:logging-consumer", "loki"),
-        ops_test.model.integrate("mimir:ingress", "traefik"),
-        ops_test.model.integrate("mimir:receive-remote-write", "agent"),
-        ops_test.model.integrate("agent:metrics-endpoint", "grafana"),
-        ops_test.model.integrate("mimir:receive-remote-write", "otelcol:send-remote-write"),
-    )
+def test_integrate(juju: jubilant.Juju):
+    juju.integrate("mimir:s3", "s3")
+    juju.integrate("mimir:mimir-cluster", "worker")
+    juju.integrate("mimir:self-metrics-endpoint", "prometheus")
+    juju.integrate("mimir:grafana-dashboards-provider", "grafana")
+    juju.integrate("mimir:grafana-source", "grafana")
+    juju.integrate("mimir:logging-consumer", "loki")
+    juju.integrate("mimir:ingress", "traefik")
+    juju.integrate("mimir:receive-remote-write", "agent")
+    juju.integrate("agent:metrics-endpoint", "grafana")
+    juju.integrate("mimir:receive-remote-write", "otelcol:send-remote-write")
 
-    await ops_test.model.wait_for_idle(
-        apps=[
-            "mimir",
-            "prometheus",
-            "loki",
-            "grafana",
-            "agent",
-            "minio",
-            "s3",
-            "worker",
-            "traefik",
-        ],
-        status="active",
+    juju.wait(
+        lambda s: jubilant.all_active(
+            s, "mimir", "prometheus", "loki", "grafana", "agent",
+            "minio", "s3", "worker", "traefik",
+        ),
         timeout=2000,
     )
 
 
 @retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
-async def test_grafana_source(ops_test: OpsTest):
+def test_grafana_source(juju: jubilant.Juju):
     """Test the grafana-source integration, by checking that Mimir appears in the Datasources."""
-    assert ops_test.model is not None
-    datasources = await get_grafana_datasources_from_client_localhost(ops_test)
+    datasources = get_grafana_datasources_from_client_localhost(juju)
     assert "mimir" in datasources[0]["name"]
 
 
 @retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
-async def test_metrics_endpoint(ops_test: OpsTest):
+def test_metrics_endpoint(juju: jubilant.Juju):
     """Check that Mimir appears in the Prometheus Scrape Targets."""
-    assert ops_test.model is not None
-    targets = await get_prometheus_targets_from_client_localhost(ops_test)
+    targets = get_prometheus_targets_from_client_localhost(juju)
     mimir_targets = [
         target
         for target in targets["activeTargets"]
@@ -138,25 +110,25 @@ async def test_metrics_endpoint(ops_test: OpsTest):
 
 
 @retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
-async def test_metrics_in_mimir(ops_test: OpsTest):
+def test_metrics_in_mimir(juju: jubilant.Juju):
     """Check that the agent metrics appear in Mimir."""
-    result = await query_mimir_from_client_localhost(ops_test, query='up{juju_charm=~"grafana-agent-k8s"}')
+    result = query_mimir_from_client_localhost(juju, query='up{juju_charm=~"grafana-agent-k8s"}')
     assert result
 
 
-async def test_traefik(ops_test: OpsTest):
+def test_traefik(juju: jubilant.Juju):
     """Check the ingress integration, by checking if Mimir is reachable through Traefik."""
-    assert ops_test.model is not None
-    proxied_endpoints = await get_traefik_proxied_endpoints(ops_test)
+    proxied_endpoints = get_traefik_proxied_endpoints(juju)
     assert "mimir" in proxied_endpoints
 
     response = requests.get(f"{proxied_endpoints['mimir']['url']}/status")
     assert response.status_code == 200
 
-async def test_exemplars(ops_test: OpsTest):
+
+def test_exemplars(juju: jubilant.Juju):
     """Check that Mimir successfully receives and stores exemplars."""
     metric_name = "sample_metric"
-    trace_id = await push_to_otelcol(ops_test, metric_name=metric_name)
+    trace_id = push_to_otelcol(juju, metric_name=metric_name)
 
-    found_trace_id = await query_exemplars(ops_test, query_name=metric_name, coordinator_app="mimir")
+    found_trace_id = query_exemplars(juju, query_name=metric_name, coordinator_app="mimir")
     assert found_trace_id == trace_id

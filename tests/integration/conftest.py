@@ -2,19 +2,26 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import functools
 import logging
 import os
-from collections import defaultdict
-from datetime import datetime
+import subprocess
 from pathlib import Path
 
+import jubilant
 import pytest
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-store = defaultdict(str)
+
+@pytest.fixture(scope="module")
+def juju(request: pytest.FixtureRequest):
+    keep = request.config.getoption("--keep-models", default=False)
+    with jubilant.temp_model(keep=keep) as juju:
+        juju.wait_timeout = 30 * 60
+        yield juju
+        if request.session.testsfailed:
+            log = juju.debug_log(limit=1000)
+            print(log, end="")
 
 
 @pytest.fixture(scope="session")
@@ -27,31 +34,13 @@ def mesh_channel():
     return "2/edge"
 
 
-def timed_memoizer(func):
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        fname = func.__qualname__
-        logger.info("Started: %s" % fname)
-        start_time = datetime.now()
-        if fname in store.keys():
-            ret = store[fname]
-        else:
-            logger.info("Return for {} not cached".format(fname))
-            ret = await func(*args, **kwargs)
-            store[fname] = ret
-        logger.info("Finished: {} in: {} seconds".format(fname, datetime.now() - start_time))
-        return ret
-
-    return wrapper
-
-
-@pytest.fixture(scope="module")
-@timed_memoizer
-async def mimir_charm(ops_test: OpsTest):
+@pytest.fixture(scope="session")
+def mimir_charm():
     """Mimir charm used for integration testing."""
     if charm_file := os.environ.get("CHARM_PATH"):
-        return Path(charm_file)
+        return charm_file
 
-    charm = await ops_test.build_charm(".")
-    assert charm
-    return str(charm)
+    subprocess.run(["charmcraft", "pack"], check=True)
+    charm_files = sorted(Path(".").glob("*.charm"))
+    assert charm_files, "No .charm file found after charmcraft pack"
+    return str(charm_files[-1].resolve())
