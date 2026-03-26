@@ -23,7 +23,7 @@ dev = [
     "minio",
     "tenacity",
     "juju",
-    "pytest-operator",
+    "pytest"
 ]
 
 # Testing tools configuration
