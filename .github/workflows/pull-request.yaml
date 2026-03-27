@@ -14,6 +14,7 @@ jobs:
     uses: canonical/observability/.github/workflows/charm-pull-request.yaml@main
     secrets: inherit
     with:
+      provider: k8s
       charm-path: ${{ matrix.charm-path }}
       enable-integration: ${{ matrix.charm-path == 'coordinator' }}
       juju-channel: 3.6/candidate
