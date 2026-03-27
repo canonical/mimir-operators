@@ -16,7 +16,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import format_trace_id
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_exponential, wait_fixed
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,8 +50,7 @@ def get_unit_address(juju: jubilant.Juju, app_name: str, unit_no: int) -> str:
     return unit.address
 
 
-def configure_minio(juju: jubilant.Juju):
-    bucket_name = "mimir"
+def configure_minio(juju: jubilant.Juju, bucket_name: str = "mimir"):
     minio_addr = get_leader_address(juju, "minio")
     mc_client = Minio(
         f"{minio_addr}:9000",
@@ -63,13 +62,13 @@ def configure_minio(juju: jubilant.Juju):
         mc_client.make_bucket(bucket_name)
 
 
-def configure_s3_integrator(juju: jubilant.Juju):
+def configure_s3_integrator(juju: jubilant.Juju, bucket_name: str = "mimir", s3_app: str = "s3"):
     model_name = juju.status().model.name
-    juju.config("s3", {
+    juju.config(s3_app, {
         "endpoint": f"minio-0.minio-endpoints.{model_name}.svc.cluster.local:9000",
-        "bucket": "mimir",
+        "bucket": bucket_name,
     })
-    juju.run("s3/leader", "sync-s3-credentials", {
+    juju.run(f"{s3_app}/leader", "sync-s3-credentials", {
         "access-key": "access",
         "secret-key": "secretsecret",
     })
@@ -238,6 +237,52 @@ def get_istio_ingress_ip(juju: jubilant.Juju, app_name: str = "istio-ingress") -
     if gateway.status and gateway.status.get("addresses"):  # type: ignore
         return gateway.status["addresses"][0]["value"]  # type: ignore
     raise ValueError(f"No ingress address found for {app_name}")
+
+
+def deploy_tempo_cluster(juju: jubilant.Juju):
+    """Deploy Tempo in its HA version together with minio and s3-integrator."""
+    tempo_app = "tempo"
+    worker_app = "tempo-worker"
+    s3_app = "s3-tempo"
+    juju.deploy("tempo-worker-k8s", app=worker_app, channel="2/edge", trust=True)
+    juju.deploy("tempo-coordinator-k8s", app=tempo_app, channel="2/edge", trust=True)
+    juju.deploy("s3-integrator", app=s3_app, channel="edge")
+
+    juju.integrate(f"{tempo_app}:s3", f"{s3_app}:s3-credentials")
+    juju.integrate(f"{tempo_app}:tempo-cluster", f"{worker_app}:tempo-cluster")
+
+    configure_minio(juju, bucket_name="tempo")
+    juju.wait(lambda status: jubilant.all_blocked(status, s3_app), timeout=300)
+    configure_s3_integrator(juju, bucket_name="tempo", s3_app=s3_app)
+
+    juju.wait(
+        lambda status: jubilant.all_active(status, tempo_app, worker_app, s3_app),
+        timeout=2000,
+    )
+
+
+def get_traces(tempo_host: str, service_name: str = "tracegen-otlp_http", tls: bool = True):
+    """Get traces directly from Tempo REST API."""
+    url = f"{'https' if tls else 'http'}://{tempo_host}:3200/api/search?tags=service.name={service_name}"
+    req = requests.get(url, verify=False)
+    assert req.status_code == 200
+    traces = json.loads(req.text)["traces"]
+    return traces
+
+
+@retry(stop=stop_after_attempt(15), wait=wait_exponential(multiplier=1, min=4, max=10))
+def get_traces_patiently(tempo_host: str, service_name: str = "tracegen-otlp_http", tls: bool = True):
+    """Get traces directly from Tempo REST API, retrying multiple times."""
+    traces = get_traces(tempo_host, service_name=service_name, tls=tls)
+    assert len(traces) > 0
+    return traces
+
+
+def get_application_ip(juju: jubilant.Juju, app_name: str) -> str:
+    """Get the application IP address."""
+    status = juju.status()
+    app = status.apps[app_name]
+    return app.address
 
 
 def service_mesh(
