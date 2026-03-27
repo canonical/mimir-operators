@@ -25,9 +25,6 @@ parts:
     plugin: uv
     build-packages: [git]
     build-snaps: [astral-uv]
-    override-build: |
-      craftctl default
-      git describe --always > $CRAFT_PART_INSTALL/version
   cos-tool:
     plugin: dump
     source: https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_ARCH_BUILD_FOR}

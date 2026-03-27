@@ -26,7 +26,7 @@ dev = [
   "minio",
   "tenacity",
   "juju",
-  "pytest-operator",
+  "jubilant",
   "opentelemetry-sdk",
   "opentelemetry-exporter-otlp-proto-http",
   # scenario
@@ -41,6 +41,7 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+fail_under = 85
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
