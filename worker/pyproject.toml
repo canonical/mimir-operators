@@ -21,12 +21,14 @@ dev = [
     "minio",
     "tenacity",
     "juju",
-    "pytest-operator",
+    "jubilant",
 ]
 
 # Testing tools configuration
 [tool.coverage.run]
 branch = true
+source = ["src"]
+omit = ["tests/**", "lib/**"]
 
 [tool.coverage.report]
 show_missing = true
