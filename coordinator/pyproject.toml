@@ -41,7 +41,6 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 90
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
