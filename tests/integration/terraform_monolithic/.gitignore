@@ -1,0 +1,8 @@
+# Terraform runtime artifacts
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+
+# Auto-generated tfvars from the test harness
+ci.auto.tfvars.json

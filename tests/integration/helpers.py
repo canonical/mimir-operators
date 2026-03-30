@@ -1,4 +1,7 @@
 import json
+import logging
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -18,7 +21,50 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import format_trace_id
 from tenacity import retry, stop_after_attempt, wait_fixed
 
+logger = logging.getLogger(__name__)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+class Terraform:
+    """Thin wrapper around the ``terraform`` CLI for integration tests."""
+
+    def __init__(self, tf_dir: Path) -> None:
+        self.tf_dir = tf_dir
+
+    def run(
+        self,
+        *args: str,
+        check: bool = True,
+        timeout: int = 1200,
+    ) -> subprocess.CompletedProcess:
+        """Run a terraform command inside the working directory."""
+        cmd = ["terraform", *args]
+        logger.info("Running: %s (cwd=%s)", " ".join(cmd), self.tf_dir)
+        return subprocess.run(cmd, cwd=self.tf_dir, check=check, timeout=timeout)
+
+    def output(self, name: str) -> str:
+        """Read a Terraform output value."""
+        result = subprocess.run(
+            ["terraform", "output", "-raw", name],
+            cwd=self.tf_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+
+    def cleanup(self) -> None:
+        """Remove Terraform runtime files so they don't pollute the working tree."""
+        for artifact in (
+            self.tf_dir / "terraform.tfstate",
+            self.tf_dir / "terraform.tfstate.backup",
+            self.tf_dir / ".terraform.lock.hcl",
+        ):
+            artifact.unlink(missing_ok=True)
+        dot_terraform = self.tf_dir / ".terraform"
+        if dot_terraform.exists():
+            shutil.rmtree(dot_terraform)
 
 
 def charm_resources(metadata_file: str | None = None) -> dict[str, str]:
