@@ -7,7 +7,8 @@
 import logging
 from enum import Enum, unique
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
+from urllib.parse import urlparse
 
 import yaml
 from coordinated_workers.coordinator import ClusterRolesConfig, Coordinator
@@ -106,6 +107,9 @@ REPLICATION_MIN_WORKERS = 3
 # The default amount of replicas to set when there are enough workers per role;
 # otherwise, replicas will be "disabled" by setting the amount to 1
 DEFAULT_REPLICATION = 3
+# The default gRPC listen port for Mimir components (server.grpc-listen-port).
+# Used for inter-component communication (e.g. querier → query-frontend).
+MIMIR_GRPC_LISTEN_PORT = 9095
 # The mimimum number of exemplars per user as per the Grafana Mimir docs
 # Please visit https://grafana.com/docs/mimir/latest/manage/use-exemplars/store-exemplars/ for more info.
 EXEMPLARS_FLOOR = 100000
@@ -140,6 +144,8 @@ class MimirConfig:
             "alertmanager": self._build_alertmanager_config(coordinator.cluster),
             "alertmanager_storage": self._build_alertmanager_storage_config(),
             "compactor": self._build_compactor_config(),
+            "frontend": self._build_frontend_config(coordinator.cluster),
+            "frontend_worker": self._build_frontend_worker_config(coordinator.cluster),
             "ingester": self._build_ingester_config(coordinator.cluster),
             "ruler": self._build_ruler_config(),
             "ruler_storage": self._build_ruler_storage_config(),
@@ -208,6 +214,40 @@ class MimirConfig:
         return {
             "data_dir": str(self._root_data_dir / "data-compactor"),
         }
+
+    def _get_grpc_addresses(self, cluster: ClusterProvider, role: str) -> List[str]:
+        """Extract gRPC addresses (host:port) for a given role from the cluster."""
+        http_addresses = cluster.gather_addresses_by_role().get(role, [])
+        grpc_addresses = []
+        for addr in http_addresses:
+            hostname = urlparse(addr).hostname
+            if hostname:
+                grpc_addresses.append(f"{hostname}:{MIMIR_GRPC_LISTEN_PORT}")
+        return grpc_addresses
+
+    # scheduler_address:
+    # Address of the query-scheduler component, in host:port format.
+    # When set, the query-frontend registers with the scheduler and
+    # queriers pull queries from it instead of connecting directly.
+    def _build_frontend_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
+        scheduler_addrs = self._get_grpc_addresses(cluster, "query-scheduler")
+        if scheduler_addrs:
+            return {"scheduler_address": ",".join(scheduler_addrs)}
+        return {}
+
+    # frontend_address / scheduler_address:
+    # Configures queriers to connect to query-frontends (or query-schedulers).
+    # Prefers query-scheduler when available.
+    def _build_frontend_worker_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
+        scheduler_addrs = self._get_grpc_addresses(cluster, "query-scheduler")
+        if scheduler_addrs:
+            return {"scheduler_address": ",".join(scheduler_addrs)}
+
+        frontend_addrs = self._get_grpc_addresses(cluster, "query-frontend")
+        if frontend_addrs:
+            return {"frontend_address": ",".join(frontend_addrs)}
+
+        return {}
 
     # ring.replication_factor: int
     # Number of ingesters that each time series is replicated to. This option
