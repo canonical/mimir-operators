@@ -125,6 +125,11 @@ def test_build_compactor_config(mimir_config):
         ({}, {}),
         # Only query-frontend present, no scheduler: empty config (frontend section doesn't need self-reference)
         ({"query-frontend": ["http://frontend.host:8080"]}, {}),
+        # Plain hostname (no scheme/port) as returned by real deployments
+        (
+            {"query-scheduler": ["sched-0.sched-endpoints.model.svc.cluster.local"]},
+            {"scheduler_address": "sched-0.sched-endpoints.model.svc.cluster.local:9095"},
+        ),
     ],
 )
 def test_build_frontend_config(mimir_config, coordinator, addresses_by_role, expected_config):
@@ -160,6 +165,19 @@ def test_build_frontend_config(mimir_config, coordinator, addresses_by_role, exp
         (
             {"query-frontend": ["http://fe.0:8080", "http://fe.1:8080"]},
             {"frontend_address": "fe.0:9095,fe.1:9095"},
+        ),
+        # Plain hostnames (no scheme/port) as returned by real deployments
+        (
+            {"query-frontend": ["fe-0.fe-endpoints.model.svc.cluster.local"]},
+            {"frontend_address": "fe-0.fe-endpoints.model.svc.cluster.local:9095"},
+        ),
+        # Plain hostname with scheduler
+        (
+            {
+                "query-scheduler": ["sched-0.sched-endpoints.model.svc.cluster.local"],
+                "query-frontend": ["fe-0.fe-endpoints.model.svc.cluster.local"],
+            },
+            {"scheduler_address": "sched-0.sched-endpoints.model.svc.cluster.local:9095"},
         ),
     ],
 )

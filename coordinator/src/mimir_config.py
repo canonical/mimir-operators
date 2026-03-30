@@ -217,10 +217,16 @@ class MimirConfig:
 
     def _get_grpc_addresses(self, cluster: ClusterProvider, role: str) -> List[str]:
         """Extract gRPC addresses (host:port) for a given role from the cluster."""
-        http_addresses = cluster.gather_addresses_by_role().get(role, [])
+        addresses = cluster.gather_addresses_by_role().get(role, [])
         grpc_addresses = []
-        for addr in http_addresses:
-            hostname = urlparse(addr).hostname
+        for addr in addresses:
+            parsed = urlparse(addr)
+            if parsed.hostname:
+                # URL with scheme (e.g. http://host:port)
+                hostname = parsed.hostname
+            else:
+                # Plain hostname or host:port without scheme
+                hostname = addr.split(":")[0]
             if hostname:
                 grpc_addresses.append(f"{hostname}:{MIMIR_GRPC_LISTEN_PORT}")
         return grpc_addresses
