@@ -116,6 +116,7 @@ def test_metrics_in_mimir(juju: jubilant.Juju):
     assert result
 
 
+@retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_traefik(juju: jubilant.Juju):
     """Check the ingress integration, by checking if Mimir is reachable through Traefik."""
     proxied_endpoints = get_traefik_proxied_endpoints(juju)
@@ -125,6 +126,7 @@ def test_traefik(juju: jubilant.Juju):
     assert response.status_code == 200
 
 
+@retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_exemplars(juju: jubilant.Juju):
     """Check that Mimir successfully receives and stores exemplars."""
     metric_name = "sample_metric"

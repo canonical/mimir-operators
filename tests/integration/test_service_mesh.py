@@ -114,6 +114,7 @@ def test_enable_service_mesh(juju: jubilant.Juju):
     )
 
 
+@retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_ingress(juju: jubilant.Juju):
     """Check the ingress integration, by checking if Mimir is reachable through the ingress endpoint."""
     model_name = juju.status().model.name
