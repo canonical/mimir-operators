@@ -109,6 +109,85 @@ def test_build_compactor_config(mimir_config):
 
 
 @pytest.mark.parametrize(
+    "addresses_by_role, expected_config",
+    [
+        # With query-scheduler: frontend registers with scheduler
+        (
+            {"query-scheduler": ["http://scheduler.host:8080"]},
+            {"scheduler_address": "scheduler.host:9095"},
+        ),
+        # Multiple schedulers: comma-separated
+        (
+            {"query-scheduler": ["http://sched.0:8080", "http://sched.1:8080"]},
+            {"scheduler_address": "sched.0:9095,sched.1:9095"},
+        ),
+        # No scheduler: empty config
+        ({}, {}),
+        # Only query-frontend present, no scheduler: empty config (frontend section doesn't need self-reference)
+        ({"query-frontend": ["http://frontend.host:8080"]}, {}),
+        # Plain hostname (no scheme/port) as returned by real deployments
+        (
+            {"query-scheduler": ["sched-0.sched-endpoints.model.svc.cluster.local"]},
+            {"scheduler_address": "sched-0.sched-endpoints.model.svc.cluster.local:9095"},
+        ),
+    ],
+)
+def test_build_frontend_config(mimir_config, coordinator, addresses_by_role, expected_config):
+    coordinator.cluster.gather_addresses_by_role.return_value = addresses_by_role
+    frontend_config = mimir_config._build_frontend_config(coordinator.cluster)
+    assert frontend_config == expected_config
+
+
+@pytest.mark.parametrize(
+    "addresses_by_role, expected_config",
+    [
+        # With query-scheduler: querier connects to scheduler
+        (
+            {"query-scheduler": ["http://scheduler.host:8080"]},
+            {"scheduler_address": "scheduler.host:9095"},
+        ),
+        # No scheduler but query-frontend exists: querier connects directly to frontend
+        (
+            {"query-frontend": ["http://frontend.host:8080"]},
+            {"frontend_address": "frontend.host:9095"},
+        ),
+        # Both scheduler and frontend: scheduler takes precedence
+        (
+            {
+                "query-scheduler": ["http://scheduler.host:8080"],
+                "query-frontend": ["http://frontend.host:8080"],
+            },
+            {"scheduler_address": "scheduler.host:9095"},
+        ),
+        # Neither: empty config
+        ({}, {}),
+        # Multiple frontends (no scheduler): comma-separated
+        (
+            {"query-frontend": ["http://fe.0:8080", "http://fe.1:8080"]},
+            {"frontend_address": "fe.0:9095,fe.1:9095"},
+        ),
+        # Plain hostnames (no scheme/port) as returned by real deployments
+        (
+            {"query-frontend": ["fe-0.fe-endpoints.model.svc.cluster.local"]},
+            {"frontend_address": "fe-0.fe-endpoints.model.svc.cluster.local:9095"},
+        ),
+        # Plain hostname with scheduler
+        (
+            {
+                "query-scheduler": ["sched-0.sched-endpoints.model.svc.cluster.local"],
+                "query-frontend": ["fe-0.fe-endpoints.model.svc.cluster.local"],
+            },
+            {"scheduler_address": "sched-0.sched-endpoints.model.svc.cluster.local:9095"},
+        ),
+    ],
+)
+def test_build_frontend_worker_config(mimir_config, coordinator, addresses_by_role, expected_config):
+    coordinator.cluster.gather_addresses_by_role.return_value = addresses_by_role
+    frontend_worker_config = mimir_config._build_frontend_worker_config(coordinator.cluster)
+    assert frontend_worker_config == expected_config
+
+
+@pytest.mark.parametrize(
     "addresses_by_role, replication",
     [
         ({"ingester": ["address.one"]}, 1),
