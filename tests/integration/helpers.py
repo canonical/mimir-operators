@@ -179,7 +179,8 @@ def push_to_otelcol(juju: jubilant.Juju, metric_name: str) -> str:
     """Push a metric along with a trace ID to an OpenTelemetry Collector.
 
     This creates an exemplar by attaching a trace ID provided by the
-    OpenTelemetry SDK to a metric.
+    OpenTelemetry SDK to a metric.  The meter provider is shut down before
+    returning to force a synchronous flush of all pending metric data.
     """
     otel_url = get_leader_address(juju, "otelcol")
     collector_endpoint = f"http://{otel_url}:4318/v1/metrics"
@@ -203,10 +204,11 @@ def push_to_otelcol(juju: jubilant.Juju, metric_name: str) -> str:
         trace_id_hex = format_trace_id(trace_id)
         counter.add(100, {"trace_id": trace_id_hex})
 
+    meter_provider.shutdown()
     return trace_id_hex
 
 
-@retry(wait=wait_fixed(20), stop=stop_after_attempt(6))
+@retry(wait=wait_fixed(20), stop=stop_after_attempt(12))
 def query_exemplars(
     juju: jubilant.Juju, query_name: str, coordinator_app: str
 ) -> str | None:
@@ -215,7 +217,9 @@ def query_exemplars(
         f"http://{mimir_url}:8080/prometheus/api/v1/query_exemplars",
         params={"query": f"{query_name}_total"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, (
+        f"query_exemplars got HTTP {response.status_code}: {response.text[:200]}"
+    )
 
     response_data = response.json()
     assert response_data.get("data", []), "No exemplar data found in Mimir's API."

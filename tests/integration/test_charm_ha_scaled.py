@@ -169,7 +169,6 @@ def test_traefik(juju: jubilant.Juju):
     assert response.status_code == 200
 
 
-@retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_exemplars(juju: jubilant.Juju):
     """Check that Mimir successfully receives and stores exemplars."""
     metric_name = "sample_metric"
