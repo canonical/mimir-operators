@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -17,6 +18,8 @@ from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import format_trace_id
 from tenacity import retry, stop_after_attempt, wait_fixed
+
+logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -240,6 +243,68 @@ def get_istio_ingress_ip(juju: jubilant.Juju, app_name: str = "istio-ingress") -
     raise ValueError(f"No ingress address found for {app_name}")
 
 
+def _resolve_errored_units(juju: jubilant.Juju, *apps: str) -> int:
+    """Resolve all units in error state. Returns the number resolved."""
+    status = juju.status()
+    resolved = 0
+    for app_name, app_status in status.apps.items():
+        if apps and app_name not in apps:
+            continue
+        for unit_name, unit_status in app_status.units.items():
+            if unit_status.workload_status.current == "error":
+                try:
+                    juju.cli("resolve", unit_name)
+                    resolved += 1
+                    logger.info("Resolved errored unit %s", unit_name)
+                except Exception:
+                    pass  # Unit may have already been resolved
+    return resolved
+
+
+def wait_for_active_or_resolve(
+    juju: jubilant.Juju,
+    *apps: str,
+    timeout: int = 1000,
+    successes: int = 3,
+    delay: float = 1.0,
+    max_resolves: int = 10,
+):
+    """Wait for apps to be active, resolving errored units along the way.
+
+    During scaling or service mesh changes, workers may transiently enter error
+    state (e.g. mimir binary gets 502 when the nginx proxy is reconfigured).
+    This helper detects errors quickly via ``jubilant.any_error`` and runs
+    ``juju resolve`` to give the charm another chance to settle.
+    """
+    resolves_remaining = max_resolves
+    while True:
+        try:
+            if apps:
+                juju.wait(
+                    lambda s, _apps=apps: jubilant.all_active(s, *_apps),
+                    error=lambda s, _apps=apps: jubilant.any_error(s, *_apps),
+                    timeout=timeout,
+                    successes=successes,
+                    delay=delay,
+                )
+            else:
+                juju.wait(
+                    jubilant.all_active,
+                    error=jubilant.any_error,
+                    timeout=timeout,
+                    successes=successes,
+                    delay=delay,
+                )
+            return
+        except jubilant.WaitError:
+            if resolves_remaining <= 0:
+                raise
+            count = _resolve_errored_units(juju, *apps)
+            if count == 0:
+                raise
+            resolves_remaining -= count
+
+
 def service_mesh(
     enable: bool,
     juju: jubilant.Juju,
@@ -248,7 +313,7 @@ def service_mesh(
 ):
     """Enable or disable the service-mesh in the model."""
     juju.config(beacon_app_name, {"model-on-mesh": str(enable).lower()})
-    juju.wait(jubilant.all_active, timeout=1000)
+    wait_for_active_or_resolve(juju, timeout=1000)
     if enable:
         for app in apps_to_be_related_with_beacon:
             juju.integrate(f"{beacon_app_name}:service-mesh", f"{app}:service-mesh")
@@ -257,4 +322,4 @@ def service_mesh(
             juju.remove_relation(
                 f"{beacon_app_name}:service-mesh", f"{app}:service-mesh"
             )
-    juju.wait(jubilant.all_active, timeout=1000, successes=10, delay=3)
+    wait_for_active_or_resolve(juju, timeout=1000, successes=10, delay=3)
