@@ -19,6 +19,7 @@ from helpers import (
     push_to_otelcol,
     query_exemplars,
     query_mimir_from_client_localhost,
+    wait_for_active_or_resolve,
 )
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -110,11 +111,10 @@ def test_integrate(juju: jubilant.Juju):
     juju.integrate("agent:metrics-endpoint", "grafana")
     juju.integrate("mimir:receive-remote-write", "otelcol:send-remote-write")
 
-    juju.wait(
-        lambda s: jubilant.all_active(
-            s, "mimir", "prometheus", "loki", "grafana", "agent",
-            "minio", "s3", "worker-read", "worker-write", "worker-backend", "traefik",
-        ),
+    wait_for_active_or_resolve(
+        juju,
+        "mimir", "prometheus", "loki", "grafana", "agent",
+        "minio", "s3", "worker-read", "worker-write", "worker-backend", "traefik",
         timeout=2000,
     )
 
@@ -124,8 +124,9 @@ def test_scale_workers(juju: jubilant.Juju):
     juju.cli("scale-application", "worker-read", "3")
     juju.cli("scale-application", "worker-write", "3")
     juju.cli("scale-application", "worker-backend", "3")
-    juju.wait(
-        lambda s: jubilant.all_active(s, "worker-read", "worker-write", "worker-backend"),
+    wait_for_active_or_resolve(
+        juju,
+        "worker-read", "worker-write", "worker-backend",
         timeout=1000,
     )
 

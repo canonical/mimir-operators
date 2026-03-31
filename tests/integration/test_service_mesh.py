@@ -18,6 +18,7 @@ from helpers import (
     get_prometheus_targets_from_client_pod,
     query_mimir_from_client_pod,
     service_mesh,
+    wait_for_active_or_resolve,
 )
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -92,11 +93,10 @@ def test_integrate(juju: jubilant.Juju):
     juju.integrate("mimir:receive-remote-write", "agent")
     juju.integrate("agent:metrics-endpoint", "grafana")
 
-    juju.wait(
-        lambda s: jubilant.all_active(
-            s, "mimir", "prometheus", "grafana", "agent",
-            "minio", "s3", "worker", "istio-ingress",
-        ),
+    wait_for_active_or_resolve(
+        juju,
+        "mimir", "prometheus", "grafana", "agent",
+        "minio", "s3", "worker", "istio-ingress",
         timeout=1000,
         successes=10,
         delay=3,
