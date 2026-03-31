@@ -359,23 +359,29 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             # Update the alert rules files on disk
             self._nginx_container.remove_path(RULES_DIR, recursive=True)
             rules_file_paths: List[str] = self._push_alert_rules(remote_write_alerts)
-            self._push(ALERTS_HASH_PATH, alerts_hash)
             # Push the alert rules to the Mimir cluster (persisted in s3)
-            mimirtool_output = self._nginx_container.pebble.exec(
-                [
-                    "mimirtool",
-                    "rules",
-                    "sync",
-                    *rules_file_paths,
-                    f"--address={self.most_external_url}",
-                    "--id=anonymous",  # multitenancy is disabled, the default tenant is 'anonymous'
-                ],
-                encoding="utf-8",
-            )
-            if mimirtool_output.stdout:
-                logger.info(f"mimirtool: {mimirtool_output.stdout.read().strip()}")
-            if mimirtool_output.stderr:
-                logger.error(f"mimirtool (err): {mimirtool_output.stderr.read().strip()}")
+            try:
+                mimirtool_output = self._nginx_container.pebble.exec(
+                    [
+                        "mimirtool",
+                        "rules",
+                        "sync",
+                        *rules_file_paths,
+                        f"--address={self.most_external_url}",
+                        "--id=anonymous",  # multitenancy is disabled, the default tenant is 'anonymous'
+                    ],
+                    encoding="utf-8",
+                )
+                stdout, stderr = mimirtool_output.wait_output()
+                if stdout:
+                    logger.info(f"mimirtool: {stdout.strip()}")
+                if stderr:
+                    logger.error(f"mimirtool (err): {stderr.strip()}")
+            except (PebbleError, ops.pebble.ExecError) as e:
+                logger.warning("mimirtool rules sync failed (will retry on next event): %s", e)
+                return
+            # Only persist the hash after a successful sync so we retry on next event
+            self._push(ALERTS_HASH_PATH, alerts_hash)
 
     def _update_prometheus_api(self) -> None:
         """Update all applications related to us via the prometheus-api relation."""

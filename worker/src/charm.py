@@ -38,8 +38,9 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
 
     def __init__(self, *args):  # type: ignore
         super().__init__(*args)
-        # Override waiting times from the generic worker
-        Worker.SERVICE_START_RETRY_STOP = tenacity.stop_after_delay(60)
+        # Override waiting times from the generic worker.
+        # 180s gives enough headroom for transient proxy disruption during scaling.
+        Worker.SERVICE_START_RETRY_STOP = tenacity.stop_after_delay(180)
         Worker.SERVICE_START_RETRY_WAIT = tenacity.wait_fixed(5)
 
         self.worker = Worker(
