@@ -6,6 +6,13 @@ This is a Terraform module facilitating the deployment of Mimir solution, using 
 > `s3-integrator` itself doesn't act as an S3 object storage system. For the HA solution to be functional, `s3-integrator` needs to point to an S3-like storage. See [this guide](https://discourse.charmhub.io/t/cos-lite-docs-set-up-minio/15211) to learn how to connect to an S3-like storage for traces.
 
 <!-- BEGIN_TF_DOCS -->
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
+| <a name="requirement_juju"></a> [juju](#requirement\_juju) | ~> 1.0 |
+
 ## Providers
 
 | Name | Version |
@@ -16,10 +23,10 @@ This is a Terraform module facilitating the deployment of Mimir solution, using 
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_mimir_backend"></a> [mimir\_backend](#module\_mimir\_backend) | git::https://github.com/canonical/mimir-worker-k8s-operator//terraform | n/a |
-| <a name="module_mimir_coordinator"></a> [mimir\_coordinator](#module\_mimir\_coordinator) | git::https://github.com/canonical/mimir-coordinator-k8s-operator//terraform | n/a |
-| <a name="module_mimir_read"></a> [mimir\_read](#module\_mimir\_read) | git::https://github.com/canonical/mimir-worker-k8s-operator//terraform | n/a |
-| <a name="module_mimir_write"></a> [mimir\_write](#module\_mimir\_write) | git::https://github.com/canonical/mimir-worker-k8s-operator//terraform | n/a |
+| <a name="module_mimir_backend"></a> [mimir\_backend](#module\_mimir\_backend) | git::https://github.com/canonical/mimir-operators//worker/terraform | n/a |
+| <a name="module_mimir_coordinator"></a> [mimir\_coordinator](#module\_mimir\_coordinator) | git::https://github.com/canonical/mimir-operators//coordinator/terraform | n/a |
+| <a name="module_mimir_read"></a> [mimir\_read](#module\_mimir\_read) | git::https://github.com/canonical/mimir-operators//worker/terraform | n/a |
+| <a name="module_mimir_write"></a> [mimir\_write](#module\_mimir\_write) | git::https://github.com/canonical/mimir-operators//worker/terraform | n/a |
 
 ## Inputs
 
