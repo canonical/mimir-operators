@@ -7,8 +7,9 @@ on:
 jobs:
     tiobe-scan:
         name: TiCs-scan
-        uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@v1
+        uses: canonical/observability/.github/workflows/charm-tiobe-scan.yaml@main
         with:
             coverage-folder: .cover
             tiobe-project-name: mimir-operators
+            lockfile-path: coordinator
         secrets: inherit
