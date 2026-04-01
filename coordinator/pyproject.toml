@@ -27,6 +27,7 @@ dev = [
   "tenacity",
   "juju",
   "jubilant",
+  "sh",
   "opentelemetry-sdk",
   "opentelemetry-exporter-otlp-proto-http",
   # scenario
