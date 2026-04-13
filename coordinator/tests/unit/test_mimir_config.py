@@ -347,6 +347,7 @@ if __name__ == "__main__":
 def test_pydantic_rejects_wrong_replication_factor_type():
     """ShardingRing replication_factor must be an int."""
     from pydantic import ValidationError
+
     from src.mimir_config import ShardingRing
 
     with pytest.raises(ValidationError):
@@ -356,6 +357,7 @@ def test_pydantic_rejects_wrong_replication_factor_type():
 def test_pydantic_rejects_missing_required_field():
     """AlertmanagerSection requires both data_dir and sharding_ring."""
     from pydantic import ValidationError
+
     from src.mimir_config import AlertmanagerSection
 
     with pytest.raises(ValidationError):

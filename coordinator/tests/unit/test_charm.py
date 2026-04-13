@@ -143,6 +143,7 @@ def test_validation_wrapper_caches_valid_config(context, s3, all_worker, nginx_c
 def test_validation_wrapper_returns_cached_on_failure(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
     """When config validation fails, the wrapper returns the last cached config and sets a flag."""
     from pydantic import ValidationError
+
     from src.mimir_config import ShardingRing
 
     state_in = State(
@@ -170,6 +171,7 @@ def test_validation_wrapper_returns_cached_on_failure(context, s3, all_worker, n
 def test_validation_error_sets_waiting_status(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
     """When validation has failed, collect_unit_status adds WaitingStatus."""
     from pydantic import ValidationError
+
     from src.mimir_config import ShardingRing
 
     state_in = State(
