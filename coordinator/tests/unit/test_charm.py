@@ -133,7 +133,7 @@ def test_validation_wrapper_no_error_on_success(context, s3, all_worker, nginx_c
     )
 
     with context(context.on.relation_joined(all_worker), state_in) as mgr:
-        state_out = mgr.run()
+        mgr.run()
 
         assert mgr.charm._config_validation_error is False
 
