@@ -38,9 +38,10 @@ from coordinated_workers.worker_telemetry import WorkerTelemetryProxyConfig
 from cosl import JujuTopology
 from cosl.interfaces.datasource_exchange import DatasourceDict
 from cosl.time_validation import is_valid_timespec
-from ops import ActiveStatus, BlockedStatus
+from ops import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.model import ModelError
 from ops.pebble import Error as PebbleError
+from pydantic import ValidationError
 
 from mimir_config import MIMIR_ROLES_CONFIG, MimirConfig
 from nginx_config import NginxHelper
@@ -72,6 +73,14 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         )
         self.alertmanager = AlertmanagerConsumer(charm=self, relation_name="alertmanager")
         self.retention_period = str(self.config['metrics_retention_period'])
+        self._mimir_config = MimirConfig(
+            topology=JujuTopology.from_charm(self),
+            alertmanager_urls=self.alertmanager.get_cluster_info(),
+            max_global_exemplars_per_user=int(self.config["max_global_exemplars_per_user"]),
+            metrics_retention_period=self.retention_period if is_valid_timespec(self.retention_period) else None,
+        )
+        self._last_valid_config: str = ""
+        self._config_validation_error: bool = False
         self.coordinator = Coordinator(
             charm=self,
             roles_config=MIMIR_ROLES_CONFIG,
@@ -100,12 +109,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 enable_health_check=True,
                 enable_status_page=True,
             ),
-            workers_config=MimirConfig(
-                topology=JujuTopology.from_charm(self),
-                alertmanager_urls=self.alertmanager.get_cluster_info(),
-                max_global_exemplars_per_user=int(self.config["max_global_exemplars_per_user"]),
-                metrics_retention_period=self.retention_period if is_valid_timespec(self.retention_period) else None,
-            ).config,
+            workers_config=self._validated_workers_config,
             worker_ports=lambda _: tuple({8080, 9095}),
             resources_requests=self.get_resource_requests,
             container_name="nginx",  # container to which resource limits will be applied
@@ -415,11 +419,30 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         """Returns a dictionary for the "requests" portion of the resources requirements."""
         return {"cpu": "50m", "memory": "100Mi"}
 
+    def _validated_workers_config(self, coordinator: Coordinator) -> str:
+        """Wrap MimirConfig.config() with Pydantic validation error handling.
+
+        On success the generated config is cached and returned.
+        On ValidationError the last known valid config is returned so that workers
+        are never disrupted by an invalid configuration.
+        """
+        try:
+            config = self._mimir_config.config(coordinator)
+            self._last_valid_config = config
+            self._config_validation_error = False
+            return config
+        except ValidationError as e:
+            logger.error("Mimir config validation failed: %s", e)
+            self._config_validation_error = True
+            return self._last_valid_config
+
     def _on_collect_unit_status(self, event: ops.CollectStatusEvent):
         event.add_status(ActiveStatus())
         if not is_valid_timespec(self.retention_period):
             logger.info(f"Suspending data deletion due to invalid option set in config: {self.retention_period}. To resume data deletion, please reset value to a valid option.")
             event.add_status(BlockedStatus(f"Invalid config option (see debug-log): retention_period={self.retention_period}"))
+        if self._config_validation_error:
+            event.add_status(WaitingStatus("Config validation failed; waiting for valid config (see debug-log)"))
 
     def _reconcile(self):
         # This method contains unconditional update logic, i.e. logic that should be executed

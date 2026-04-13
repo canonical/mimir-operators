@@ -7,6 +7,11 @@ from deepdiff import DeepDiff
 from src.mimir_config import MimirConfig
 
 
+def _dump(model):
+    """Dump a Pydantic model to dict, excluding None values for comparison."""
+    return model.model_dump(exclude_none=True)
+
+
 @pytest.fixture(scope="module")
 def topology():
     top = MagicMock()
@@ -71,7 +76,7 @@ def test_build_alertmanager_config(mimir_config, coordinator, addresses_by_role,
         "data_dir": "/data/data-alertmanager",
         "sharding_ring": {"replication_factor": replication},
     }
-    assert alertmanager_config == expected_config
+    assert _dump(alertmanager_config) == expected_config
 
 @pytest.mark.parametrize(
     "max_global_exemplars_per_user, expected_value",
@@ -94,18 +99,18 @@ def test_max_global_exemplars_per_user_logic(mimir_config, max_global_exemplars_
     limits_config = mimir_config._build_limits_config()
 
     # Assert that the value for max_global_exemplars_per_user matches the expected value
-    assert limits_config["max_global_exemplars_per_user"] == expected_value
+    assert limits_config.max_global_exemplars_per_user == expected_value
 
 def test_build_alertmanager_storage_config(mimir_config):
     alertmanager_storage_config = mimir_config._build_alertmanager_storage_config()
     expected_config = {"filesystem": {"dir": "/recovery-data/data-alertmanager"}}
-    assert DeepDiff(alertmanager_storage_config, expected_config) == {}
+    assert DeepDiff(_dump(alertmanager_storage_config), expected_config) == {}
 
 
 def test_build_compactor_config(mimir_config):
     compactor_config = mimir_config._build_compactor_config()
     expected_config = {"data_dir": "/data/data-compactor"}
-    assert compactor_config == expected_config
+    assert _dump(compactor_config) == expected_config
 
 
 @pytest.mark.parametrize(
@@ -135,7 +140,7 @@ def test_build_compactor_config(mimir_config):
 def test_build_frontend_config(mimir_config, coordinator, addresses_by_role, expected_config):
     coordinator.cluster.gather_addresses_by_role.return_value = addresses_by_role
     frontend_config = mimir_config._build_frontend_config(coordinator.cluster)
-    assert frontend_config == expected_config
+    assert _dump(frontend_config) == expected_config
 
 
 @pytest.mark.parametrize(
@@ -184,7 +189,7 @@ def test_build_frontend_config(mimir_config, coordinator, addresses_by_role, exp
 def test_build_frontend_worker_config(mimir_config, coordinator, addresses_by_role, expected_config):
     coordinator.cluster.gather_addresses_by_role.return_value = addresses_by_role
     frontend_worker_config = mimir_config._build_frontend_worker_config(coordinator.cluster)
-    assert frontend_worker_config == expected_config
+    assert _dump(frontend_worker_config) == expected_config
 
 
 @pytest.mark.parametrize(
@@ -199,7 +204,7 @@ def test_build_ingester_config(mimir_config, coordinator, addresses_by_role, rep
     coordinator.cluster.gather_addresses_by_role.return_value = addresses_by_role
     ingester_config = mimir_config._build_ingester_config(coordinator.cluster)
     expected_config = {"ring": {"replication_factor": replication}}
-    assert ingester_config == expected_config
+    assert _dump(ingester_config) == expected_config
 
 
 def test_build_ruler_config(mimir_config):
@@ -208,7 +213,7 @@ def test_build_ruler_config(mimir_config):
         "rule_path": "/data/data-ruler",
         "alertmanager_url": "http://some.am.0:9093,http://some.am.1:9093",
     }
-    assert ruler_config == expected_config
+    assert _dump(ruler_config) == expected_config
 
 
 @pytest.mark.parametrize(
@@ -223,13 +228,13 @@ def test_build_store_gateway_config(mimir_config, coordinator, addresses_by_role
     coordinator.cluster.gather_addresses_by_role.return_value = addresses_by_role
     store_gateway_config = mimir_config._build_store_gateway_config(coordinator.cluster)
     expected_config = {"sharding_ring": {"replication_factor": replication}}
-    assert store_gateway_config == expected_config
+    assert _dump(store_gateway_config) == expected_config
 
 
 def test_build_ruler_storage_config(mimir_config):
     ruler_storage_config = mimir_config._build_ruler_storage_config()
     expected_config = {"filesystem": {"dir": "/data/rules"}}
-    assert ruler_storage_config == expected_config
+    assert _dump(ruler_storage_config) == expected_config
 
 
 def test_build_blocks_storage_config(mimir_config):
@@ -239,7 +244,7 @@ def test_build_blocks_storage_config(mimir_config):
         "filesystem": {"dir": "/data/blocks"},
         "tsdb": {"dir": "/data/tsdb"},
     }
-    assert blocks_storage_config == expected_config
+    assert _dump(blocks_storage_config) == expected_config
 
 
 def test_build_s3_storage_config(mimir_config, coordinator):
@@ -254,7 +259,7 @@ def test_build_s3_storage_config(mimir_config, coordinator):
     }
     s3_storage_config_http = mimir_config._build_s3_storage_config(s3_data_http.copy())
     expected_config_http = {"backend": "s3", "s3": s3_data_http}
-    assert s3_storage_config_http == expected_config_http
+    assert _dump(s3_storage_config_http) == expected_config_http
 
     # HTTPS endpoint
     s3_data_https = {
@@ -267,21 +272,28 @@ def test_build_s3_storage_config(mimir_config, coordinator):
     }
     s3_storage_config_https = mimir_config._build_s3_storage_config(s3_data_https.copy())
     expected_config_https = {"backend": "s3", "s3": s3_data_https}
-    assert s3_storage_config_https == expected_config_https
+    assert _dump(s3_storage_config_https) == expected_config_https
 
 
-def test_update_s3_storage_config(mimir_config):
-    storage_config = {"filesystem": {"dir": "/data/blocks"}}
-    mimir_config._update_s3_storage_config(storage_config, "blocks")
-    expected_config = {"storage_prefix": "blocks"}
-    assert storage_config == expected_config
+def test_s3_storage_replaces_filesystem(mimir_config):
+    """When S3 is enabled, filesystem storage is replaced with storage_prefix."""
+    # blocks_storage
+    blocks_s3 = mimir_config._build_blocks_storage_config(use_s3=True)
+    dumped = _dump(blocks_s3)
+    assert "filesystem" not in dumped
+    assert dumped["storage_prefix"] == "blocks"
 
+    # ruler_storage
+    ruler_s3 = mimir_config._build_ruler_storage_config(use_s3=True)
+    dumped = _dump(ruler_s3)
+    assert "filesystem" not in dumped
+    assert dumped["storage_prefix"] == "rules"
 
-def test_empty_update_s3_storage_config(mimir_config):
-    storage_config = {"storage_prefix": "blocks"}
-    mimir_config._update_s3_storage_config(storage_config, "blocks")
-    expected_config = {"storage_prefix": "blocks"}
-    assert storage_config == expected_config
+    # alertmanager_storage
+    am_s3 = mimir_config._build_alertmanager_storage_config(use_s3=True)
+    dumped = _dump(am_s3)
+    assert "filesystem" not in dumped
+    assert dumped["storage_prefix"] == "alerts"
 
 
 def test_build_memberlist_config(mimir_config, coordinator):
@@ -290,7 +302,7 @@ def test_build_memberlist_config(mimir_config, coordinator):
         "cluster_label": "some-model_some-uuid_mimir",
         "join_members": ["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"],
     }
-    assert memberlist_config == expected_config
+    assert _dump(memberlist_config) == expected_config
 
 
 def test_build_tls_config(mimir_config):
@@ -304,7 +316,7 @@ def test_build_tls_config(mimir_config):
         },
         # FIXME: investigate adding grpc_tls_config: https://github.com/canonical/mimir-coordinator-k8s-operator/issues/141
     }
-    assert tls_config == expected_config
+    assert _dump(tls_config) == expected_config
 
 @pytest.mark.parametrize(
     "retention_period_config, expected_value",
@@ -322,7 +334,44 @@ def test_retention_period_logic(mimir_config, retention_period_config, expected_
     limits_config = mimir_config._build_limits_config()
 
     # Assert that the value for compactor_blocks_retention_period matches the expected value
-    assert limits_config["compactor_blocks_retention_period"] == expected_value
+    assert limits_config.compactor_blocks_retention_period == expected_value
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Pydantic validation tests
+# ---------------------------------------------------------------------------
+
+def test_pydantic_rejects_wrong_replication_factor_type():
+    """ShardingRing replication_factor must be an int."""
+    from pydantic import ValidationError
+    from src.mimir_config import ShardingRing
+
+    with pytest.raises(ValidationError):
+        ShardingRing(replication_factor="not-a-number")  # type: ignore
+
+
+def test_pydantic_rejects_missing_required_field():
+    """AlertmanagerSection requires both data_dir and sharding_ring."""
+    from pydantic import ValidationError
+    from src.mimir_config import AlertmanagerSection
+
+    with pytest.raises(ValidationError):
+        AlertmanagerSection(data_dir="/data")  # type: ignore  # missing sharding_ring
+
+
+def test_pydantic_s3_config_allows_extra_keys():
+    """S3Config accepts arbitrary keys from the S3 integration."""
+    from src.mimir_config import S3Config
+
+    s3 = S3Config.model_validate({
+        "endpoint": "s3.example.com:443",
+        "access-key": "AKID",
+        "secret-key": "secret",
+        "bucket": "mybucket",
+    })
+    dumped = s3.model_dump(exclude_none=True)
+    assert dumped["endpoint"] == "s3.example.com:443"
+    assert dumped["access-key"] == "AKID"

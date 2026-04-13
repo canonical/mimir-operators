@@ -7,7 +7,7 @@
 import logging
 from enum import Enum, unique
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 
 import yaml
@@ -15,6 +15,7 @@ from coordinated_workers.coordinator import ClusterRolesConfig, Coordinator
 from coordinated_workers.interfaces.cluster import ClusterProvider
 from coordinated_workers.worker import CERT_FILE, CLIENT_CA_FILE, KEY_FILE
 from cosl import JujuTopology
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,189 @@ MIMIR_GRPC_LISTEN_PORT = 9095
 # Please visit https://grafana.com/docs/mimir/latest/manage/use-exemplars/store-exemplars/ for more info.
 EXEMPLARS_FLOOR = 100000
 
+# ---------------------------------------------------------------------------
+# Pydantic models for structured config validation
+# ---------------------------------------------------------------------------
+
+
+class ShardingRing(BaseModel):
+    """Sharding ring configuration (alertmanager, store-gateway)."""
+
+    replication_factor: int
+
+
+class AlertmanagerSection(BaseModel):
+    """Alertmanager component configuration."""
+
+    data_dir: str
+    sharding_ring: ShardingRing
+
+
+class FilesystemStorage(BaseModel):
+    """Local filesystem storage directory."""
+
+    dir: str
+
+
+class AlertmanagerStorageSection(BaseModel):
+    """Alertmanager storage configuration (filesystem or S3)."""
+
+    filesystem: Optional[FilesystemStorage] = None
+    storage_prefix: Optional[str] = None
+
+
+class CompactorSection(BaseModel):
+    """Compactor component configuration."""
+
+    data_dir: str
+
+
+class FrontendSection(BaseModel):
+    """Query-frontend configuration."""
+
+    scheduler_address: Optional[str] = None
+
+
+class FrontendWorkerSection(BaseModel):
+    """Frontend-worker / querier connection configuration."""
+
+    scheduler_address: Optional[str] = None
+    frontend_address: Optional[str] = None
+
+
+class IngesterRing(BaseModel):
+    """Ingester ring configuration."""
+
+    replication_factor: int
+
+
+class IngesterSection(BaseModel):
+    """Ingester component configuration."""
+
+    ring: IngesterRing
+
+
+class RulerSection(BaseModel):
+    """Ruler component configuration."""
+
+    rule_path: str
+    alertmanager_url: str
+
+
+class StoreGatewaySection(BaseModel):
+    """Store-gateway component configuration."""
+
+    sharding_ring: ShardingRing
+
+
+class RulerStorageSection(BaseModel):
+    """Ruler storage configuration (filesystem or S3)."""
+
+    filesystem: Optional[FilesystemStorage] = None
+    storage_prefix: Optional[str] = None
+
+
+class BucketStore(BaseModel):
+    """Bucket store sync directory."""
+
+    sync_dir: str
+
+
+class Tsdb(BaseModel):
+    """TSDB (ingester WAL) directory."""
+
+    dir: str
+
+
+class BlocksStorageSection(BaseModel):
+    """Blocks storage configuration."""
+
+    bucket_store: BucketStore
+    filesystem: Optional[FilesystemStorage] = None
+    tsdb: Tsdb
+    storage_prefix: Optional[str] = None
+
+
+class S3Http(BaseModel):
+    """S3 HTTP/TLS configuration."""
+
+    tls_ca_path: str
+
+
+class S3Config(BaseModel):
+    """S3 storage credentials and settings (extra keys allowed)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    http: Optional[S3Http] = None
+
+
+class CommonStorage(BaseModel):
+    """Common storage backend configuration."""
+
+    backend: str
+    s3: S3Config
+
+
+class CommonSection(BaseModel):
+    """Common section of the Mimir config."""
+
+    storage: Optional[CommonStorage] = None
+
+
+class MemberlistSection(BaseModel):
+    """Memberlist gossip configuration."""
+
+    cluster_label: str
+    join_members: List[str]
+
+
+class LimitsSection(BaseModel):
+    """Per-tenant / global limits."""
+
+    ruler_max_rules_per_rule_group: int
+    ruler_max_rule_groups_per_tenant: int
+    max_global_series_per_user: int
+    ingestion_rate: int
+    ingestion_burst_size: int
+    max_global_exemplars_per_user: int
+    compactor_blocks_retention_period: Union[int, str]
+
+
+class TlsConfig(BaseModel):
+    """TLS certificate paths."""
+
+    cert_file: str
+    key_file: str
+    client_ca_file: str
+    client_auth_type: str
+
+
+class ServerSection(BaseModel):
+    """Server-level TLS configuration."""
+
+    http_tls_config: TlsConfig
+
+
+class MimirConfigModel(BaseModel):
+    """Top-level Mimir configuration model."""
+
+    common: CommonSection = CommonSection()
+    alertmanager: AlertmanagerSection
+    alertmanager_storage: AlertmanagerStorageSection
+    compactor: CompactorSection
+    frontend: FrontendSection = FrontendSection()
+    frontend_worker: FrontendWorkerSection = FrontendWorkerSection()
+    ingester: IngesterSection
+    ruler: RulerSection
+    ruler_storage: RulerStorageSection
+    store_gateway: StoreGatewaySection
+    blocks_storage: BlocksStorageSection
+    memberlist: MemberlistSection
+    limits: LimitsSection
+    server: Optional[ServerSection] = None
+
+
 class MimirConfig:
     """Config builder for the Mimir Coordinator."""
 
@@ -139,47 +323,43 @@ class MimirConfig:
 
         Reference: https://grafana.com/docs/mimir/latest/configure/
         """
-        mimir_config: Dict[str, Any] = {
-            "common": {},
-            "alertmanager": self._build_alertmanager_config(coordinator.cluster),
-            "alertmanager_storage": self._build_alertmanager_storage_config(),
-            "compactor": self._build_compactor_config(),
-            "frontend": self._build_frontend_config(coordinator.cluster),
-            "frontend_worker": self._build_frontend_worker_config(coordinator.cluster),
-            "ingester": self._build_ingester_config(coordinator.cluster),
-            "ruler": self._build_ruler_config(),
-            "ruler_storage": self._build_ruler_storage_config(),
-            "store_gateway": self._build_store_gateway_config(coordinator.cluster),
-            "blocks_storage": self._build_blocks_storage_config(),
-            "memberlist": self._build_memberlist_config(coordinator.cluster),
-            "limits": self._build_limits_config(),
-        }
+        s3_ready = coordinator.s3_ready
 
-        if coordinator.s3_ready:
-            mimir_config["common"]["storage"] = self._build_s3_storage_config(
-                coordinator._s3_config
-            )
-            self._update_s3_storage_config(mimir_config["blocks_storage"], "blocks")
-            self._update_s3_storage_config(mimir_config["ruler_storage"], "rules")
-            self._update_s3_storage_config(mimir_config["alertmanager_storage"], "alerts")
+        mimir_config = MimirConfigModel(
+            common=CommonSection(
+                storage=self._build_s3_storage_config(coordinator._s3_config)
+                if s3_ready
+                else None,
+            ),
+            alertmanager=self._build_alertmanager_config(coordinator.cluster),
+            alertmanager_storage=self._build_alertmanager_storage_config(use_s3=s3_ready),
+            compactor=self._build_compactor_config(),
+            frontend=self._build_frontend_config(coordinator.cluster),
+            frontend_worker=self._build_frontend_worker_config(coordinator.cluster),
+            ingester=self._build_ingester_config(coordinator.cluster),
+            ruler=self._build_ruler_config(),
+            ruler_storage=self._build_ruler_storage_config(use_s3=s3_ready),
+            store_gateway=self._build_store_gateway_config(coordinator.cluster),
+            blocks_storage=self._build_blocks_storage_config(use_s3=s3_ready),
+            memberlist=self._build_memberlist_config(coordinator.cluster),
+            limits=self._build_limits_config(),
+            server=self._build_tls_config()
+            if coordinator.nginx.are_certificates_on_disk
+            else None,
+        )
 
-        # todo: TLS config for memberlist
-        if coordinator.nginx.are_certificates_on_disk:
-            mimir_config["server"] = self._build_tls_config()
+        return yaml.dump(mimir_config.model_dump(exclude_none=True))
 
-        return yaml.dump(mimir_config)
-
-    def _build_tls_config(self) -> Dict[str, Any]:
-        tls_config = {
-            "cert_file": CERT_FILE,
-            "key_file": KEY_FILE,
-            "client_ca_file": CLIENT_CA_FILE,
-            "client_auth_type": "RequestClientCert",
-        }
-        return {
-            "http_tls_config": tls_config,
+    def _build_tls_config(self) -> ServerSection:
+        return ServerSection(
+            http_tls_config=TlsConfig(
+                cert_file=CERT_FILE,
+                key_file=KEY_FILE,
+                client_ca_file=CLIENT_CA_FILE,
+                client_auth_type="RequestClientCert",
+            ),
             # FIXME: investigate adding grpc_tls_config: https://github.com/canonical/mimir-coordinator-k8s-operator/issues/141
-        }
+        )
 
     # data_dir:
     # The Mimir Alertmanager stores the alerts state on local disk at the location configured using -alertmanager.storage.path.
@@ -187,33 +367,37 @@ class MimirConfig:
 
     # sharding_ring.replication_factor: int
     # (advanced) The replication factor to use when sharding the alertmanager.
-    def _build_alertmanager_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
+    def _build_alertmanager_config(self, cluster: ClusterProvider) -> AlertmanagerSection:
         alertmanager_scale = len(cluster.gather_addresses_by_role().get("alertmanager", []))
-        return {
-            "data_dir": str(self._root_data_dir / "data-alertmanager"),
-            "sharding_ring": {
-                "replication_factor": (
+        return AlertmanagerSection(
+            data_dir=str(self._root_data_dir / "data-alertmanager"),
+            sharding_ring=ShardingRing(
+                replication_factor=(
                     1 if alertmanager_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
                 )
-            },
-        }
+            ),
+        )
 
     # filesystem: dir
     # The Mimir Alertmanager also periodically stores the alert state in the storage backend configured with -alertmanager-storage.backend (For Recovery)
-    def _build_alertmanager_storage_config(self) -> Dict[str, Any]:
-        return {
-            "filesystem": {
-                "dir": str(self._recovery_data_dir / "data-alertmanager"),
-            },
-        }
+    def _build_alertmanager_storage_config(
+        self, *, use_s3: bool = False
+    ) -> AlertmanagerStorageSection:
+        if use_s3:
+            return AlertmanagerStorageSection(storage_prefix="alerts")
+        return AlertmanagerStorageSection(
+            filesystem=FilesystemStorage(
+                dir=str(self._recovery_data_dir / "data-alertmanager")
+            ),
+        )
 
     # data_dir:
     # Directory to temporarily store blocks during compaction.
     # This directory is not required to be persisted between restarts.
-    def _build_compactor_config(self) -> Dict[str, Any]:
-        return {
-            "data_dir": str(self._root_data_dir / "data-compactor"),
-        }
+    def _build_compactor_config(self) -> CompactorSection:
+        return CompactorSection(
+            data_dir=str(self._root_data_dir / "data-compactor"),
+        )
 
     def _get_grpc_addresses(self, cluster: ClusterProvider, role: str) -> List[str]:
         """Extract gRPC addresses (host:port) for a given role from the cluster."""
@@ -235,72 +419,72 @@ class MimirConfig:
     # Address of the query-scheduler component, in host:port format.
     # When set, the query-frontend registers with the scheduler and
     # queriers pull queries from it instead of connecting directly.
-    def _build_frontend_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
+    def _build_frontend_config(self, cluster: ClusterProvider) -> FrontendSection:
         scheduler_addrs = self._get_grpc_addresses(cluster, "query-scheduler")
         if scheduler_addrs:
-            return {"scheduler_address": ",".join(scheduler_addrs)}
-        return {}
+            return FrontendSection(scheduler_address=",".join(scheduler_addrs))
+        return FrontendSection()
 
     # frontend_address / scheduler_address:
     # Configures queriers to connect to query-frontends (or query-schedulers).
     # Prefers query-scheduler when available.
-    def _build_frontend_worker_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
+    def _build_frontend_worker_config(self, cluster: ClusterProvider) -> FrontendWorkerSection:
         scheduler_addrs = self._get_grpc_addresses(cluster, "query-scheduler")
         if scheduler_addrs:
-            return {"scheduler_address": ",".join(scheduler_addrs)}
+            return FrontendWorkerSection(scheduler_address=",".join(scheduler_addrs))
 
         frontend_addrs = self._get_grpc_addresses(cluster, "query-frontend")
         if frontend_addrs:
-            return {"frontend_address": ",".join(frontend_addrs)}
+            return FrontendWorkerSection(frontend_address=",".join(frontend_addrs))
 
-        return {}
+        return FrontendWorkerSection()
 
     # ring.replication_factor: int
     # Number of ingesters that each time series is replicated to. This option
     # needs be set on ingesters, distributors, queriers and rulers when running in
     # microservices mode.
-    def _build_ingester_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
+    def _build_ingester_config(self, cluster: ClusterProvider) -> IngesterSection:
         ingester_scale = len(cluster.gather_addresses_by_role().get("ingester", []))
-        return {
-            "ring": {
-                "replication_factor": (
+        return IngesterSection(
+            ring=IngesterRing(
+                replication_factor=(
                     1 if ingester_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
                 )
-            }
-        }
+            )
+        )
 
     # rule_path:
     # Directory to store temporary rule files loaded by the Prometheus rule managers.
     # This directory is not required to be persisted between restarts.
-    def _build_ruler_config(self) -> Dict[str, Any]:
-        return {
-            "rule_path": str(self._root_data_dir / "data-ruler"),
-            "alertmanager_url": ",".join(sorted(self._alertmanager_urls)),
-        }
+    def _build_ruler_config(self) -> RulerSection:
+        return RulerSection(
+            rule_path=str(self._root_data_dir / "data-ruler"),
+            alertmanager_url=",".join(sorted(self._alertmanager_urls)),
+        )
 
     # sharding_ring.replication_factor:
     # (advanced) The replication factor to use when sharding blocks. This option
     # needs be set both on the store-gateway, querier and ruler when running in
     # microservices mode.
-    def _build_store_gateway_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
+    def _build_store_gateway_config(self, cluster: ClusterProvider) -> StoreGatewaySection:
         store_gateway_scale = len(cluster.gather_addresses_by_role().get("store-gateway", []))
-        return {
-            "sharding_ring": {
-                "replication_factor": (
+        return StoreGatewaySection(
+            sharding_ring=ShardingRing(
+                replication_factor=(
                     1 if store_gateway_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
                 )
-            }
-        }
+            )
+        )
 
     # filesystem: dir
     # Storage backend reads Prometheus recording rules from the local filesystem.
     # The ruler looks for tenant rules in the self._root_data_dir/rules/<TENANT ID> directory. The ruler requires rule files to be in the Prometheus format.
-    def _build_ruler_storage_config(self) -> Dict[str, Any]:
-        return {
-            "filesystem": {
-                "dir": str(self._root_data_dir / "rules"),
-            },
-        }
+    def _build_ruler_storage_config(self, *, use_s3: bool = False) -> RulerStorageSection:
+        if use_s3:
+            return RulerStorageSection(storage_prefix="rules")
+        return RulerStorageSection(
+            filesystem=FilesystemStorage(dir=str(self._root_data_dir / "rules")),
+        )
 
     # bucket_store: sync_dir
     # Directory to store synchronized TSDB index headers. This directory is not
@@ -315,41 +499,27 @@ class MimirConfig:
 
     # The TSDB dir is used by ingesters, while the filesystem: dir is the "object storage"
     # Ingesters are expected to upload TSDB blocks to filesystem: dir every 2h.
-    def _build_blocks_storage_config(self) -> Dict[str, Any]:
-        return {
-            "bucket_store": {
-                "sync_dir": str(self._root_data_dir / "tsdb-sync"),
-            },
-            "filesystem": {
-                "dir": str(self._root_data_dir / "blocks"),
-            },
-            "tsdb": {
-                "dir": str(self._root_data_dir / "tsdb"),
-            },
-        }
+    def _build_blocks_storage_config(self, *, use_s3: bool = False) -> BlocksStorageSection:
+        return BlocksStorageSection(
+            bucket_store=BucketStore(sync_dir=str(self._root_data_dir / "tsdb-sync")),
+            filesystem=None
+            if use_s3
+            else FilesystemStorage(dir=str(self._root_data_dir / "blocks")),
+            tsdb=Tsdb(dir=str(self._root_data_dir / "tsdb")),
+            storage_prefix="blocks" if use_s3 else None,
+        )
 
-    def _build_s3_storage_config(self, s3_config_data: Dict[str, Any]) -> Dict[str, Any]:
-        tls_ca_path = s3_config_data.get("tls_ca_path", None)
-        s3_config_data.pop("tls_ca_path", None)
+    def _build_s3_storage_config(self, s3_config_data: Dict[str, Any]) -> CommonStorage:
+        s3_data = dict(s3_config_data)
+        tls_ca_path = s3_data.pop("tls_ca_path", None)
 
-        s3_storage_config = {
-            "backend": "s3",
-            "s3": s3_config_data,
-        }
         if tls_ca_path:
-            s3_storage_config["s3"]["http"] = {"tls_ca_path": tls_ca_path}
+            s3_data["http"] = {"tls_ca_path": tls_ca_path}
 
-        return s3_storage_config
-
-    def _update_s3_storage_config(self, storage_config: Dict[str, Any], prefix_name: str) -> None:
-        """Update S3 storage configuration in `storage_config`.
-
-        If the key 'filesystem' is present in `storage_config`, remove it and add a new key
-        'storage_prefix' with the value of `prefix_name` for the S3 bucket.
-        """
-        if "filesystem" in storage_config:
-            storage_config.pop("filesystem")
-            storage_config["storage_prefix"] = prefix_name
+        return CommonStorage(
+            backend="s3",
+            s3=S3Config.model_validate(s3_data),
+        )
 
     # cluster_label:
     # (advanced) The cluster label is an optional string to include in outbound
@@ -357,53 +527,41 @@ class MimirConfig:
     # discard any message whose label doesn't match the configured one, unless the
     def _build_memberlist_config(
         self, cluster: ClusterProvider
-    ) -> Dict[str, Any]:
+    ) -> MemberlistSection:
         topology_dict = self._topology.as_dict()
-        return {
-            "cluster_label": f"{topology_dict['model']}_{topology_dict['model_uuid']}_{topology_dict['application']}",
-            "join_members": list(cluster.gather_addresses()),
-        }
+        return MemberlistSection(
+            cluster_label=f"{topology_dict['model']}_{topology_dict['model_uuid']}_{topology_dict['application']}",
+            join_members=list(cluster.gather_addresses()),
+        )
 
-    def _build_limits_config(self) -> Dict[str, Any]:
+    def _build_limits_config(self) -> LimitsSection:
         """Default and per-tenant limits imposed by components.
 
         Our deployment does not support multi-tenancy, so per-user limits are effectively global limits.
 
         Ref: https://grafana.com/docs/mimir/latest/configure/configuration-parameters/#limits
         """
-        limits_config: Dict[str, Any] = {
-            # Maximum number of rules per rule group per-tenant. 0 to disable.
-            # CLI flag: -ruler.max-rules-per-rule-group
-            "ruler_max_rules_per_rule_group": 0,  # default = 20
-
-            # Maximum number of rule groups per-tenant. 0 to disable.
-            # CLI flag: -ruler.max-rule-groups-per-tenant
-            "ruler_max_rule_groups_per_tenant": 0,  # default = 70
-
-            # The maximum number of in-memory series per tenant, across the cluster before
-            # replication. 0 to disable.
-            # CLI flag: -ingester.max-global-series-per-user
-            "max_global_series_per_user": 0,  # default = 150000
-
-            # Per-tenant ingestion rate limit in samples per second.
-            # CLI flag: -distributor.ingestion-rate-limit
-            "ingestion_rate": 100_000,  # default = 10000
-
-            # Per-tenant allowed ingestion burst size (in number of samples).
-            # CLI flag: -distributor.ingestion-burst-size
-            "ingestion_burst_size": 2_000_000,  # default = 200000]
-        }
-
         # Set the max global exemplars per user based on the value of _max_global_exemplars_per_user
-        if val := max(self._max_global_exemplars_per_user or 0, 0):
-            val = max(val, EXEMPLARS_FLOOR)
-        limits_config["max_global_exemplars_per_user"] = val
+        val: int = 0
+        if raw := max(self._max_global_exemplars_per_user or 0, 0):
+            val = max(raw, EXEMPLARS_FLOOR)
 
-        # If the config value is invalid, the charm will pass None to MimirConfig, which sets its_metrics_retention_period attribute to "0".
-        # We'll turn that into an int so it shows up like compactor_blocks_retention_period: 0 in the worker's config YAML file
-        # And not compactor_blocks_retention_period: '0'. Both are valid, but the Grafana docs use 0 (https://grafana.com/docs/mimir/latest/configure/configure-metrics-storage-retention/).
-        # This is for consistency.
-        limits_config["compactor_blocks_retention_period"] = 0 if self._metrics_retention_period == "0" else self._metrics_retention_period
+        # If the config value is invalid, the charm will pass None to MimirConfig, which sets its
+        # _metrics_retention_period attribute to "0".
+        # We'll turn that into an int so it shows up like compactor_blocks_retention_period: 0
+        # in the worker's config YAML file and not compactor_blocks_retention_period: '0'.
+        # Both are valid, but the Grafana docs use 0.
+        retention: Union[int, str] = (
+            0 if self._metrics_retention_period == "0" else self._metrics_retention_period
+        )
 
-        return limits_config
+        return LimitsSection(
+            ruler_max_rules_per_rule_group=0,
+            ruler_max_rule_groups_per_tenant=0,
+            max_global_series_per_user=0,
+            ingestion_rate=100_000,
+            ingestion_burst_size=2_000_000,
+            max_global_exemplars_per_user=val,
+            compactor_blocks_retention_period=retention,
+        )
 

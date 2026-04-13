@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest as pytest
 from coordinated_workers.coordinator import Coordinator
 from helpers import get_key_from_worker_config_exemplars
-from ops.testing import ActiveStatus, BlockedStatus
+from ops.testing import ActiveStatus, BlockedStatus, WaitingStatus
 from scenario import State
 
 from src.mimir_config import (
@@ -122,3 +122,69 @@ def test_config_retention_period(context, s3, all_worker, nginx_container, nginx
         config = get_key_from_worker_config_exemplars(state_out.relations, "mimir-cluster", "compactor_blocks_retention_period")
         assert config == expected_value
         assert isinstance(state_out.unit_status, expected_status)
+
+
+def test_validation_wrapper_caches_valid_config(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
+    """When config generation succeeds, the result is cached."""
+    state_in = State(
+        relations=[s3, all_worker],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+    )
+
+    with context(context.on.relation_joined(all_worker), state_in) as mgr:
+        state_out = mgr.run()
+
+        # The charm should have a cached config and no validation error
+        assert mgr.charm._last_valid_config != ""
+        assert mgr.charm._config_validation_error is False
+
+
+def test_validation_wrapper_returns_cached_on_failure(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
+    """When config validation fails, the wrapper returns the last cached config and sets a flag."""
+    from pydantic import ValidationError
+    from src.mimir_config import ShardingRing
+
+    state_in = State(
+        relations=[s3, all_worker],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+    )
+
+    with context(context.on.relation_joined(all_worker), state_in) as mgr:
+        state_out = mgr.run()
+        cached = mgr.charm._last_valid_config
+        assert cached != ""
+
+        # Now simulate a validation failure
+        try:
+            ShardingRing(replication_factor="bad")  # type: ignore
+        except ValidationError as exc:
+            mgr.charm._mimir_config.config = MagicMock(side_effect=exc)
+
+        result = mgr.charm._validated_workers_config(MagicMock())
+        assert result == cached
+        assert mgr.charm._config_validation_error is True
+
+
+def test_validation_error_sets_waiting_status(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
+    """When validation has failed, collect_unit_status adds WaitingStatus."""
+    from pydantic import ValidationError
+    from src.mimir_config import ShardingRing
+
+    state_in = State(
+        relations=[s3, all_worker],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+    )
+
+    with context(context.on.relation_joined(all_worker), state_in) as mgr:
+        # After __init__ (which succeeds), make config generation fail for the event
+        try:
+            ShardingRing(replication_factor="bad")  # type: ignore
+        except ValidationError as exc:
+            mgr.charm._mimir_config.config = MagicMock(side_effect=exc)
+
+        state_out = mgr.run()
+        assert mgr.charm._config_validation_error is True
+        assert isinstance(state_out.unit_status, WaitingStatus)
