@@ -124,8 +124,8 @@ def test_config_retention_period(context, s3, all_worker, nginx_container, nginx
         assert isinstance(state_out.unit_status, expected_status)
 
 
-def test_validation_wrapper_caches_valid_config(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
-    """When config generation succeeds, the result is cached."""
+def test_validation_wrapper_no_error_on_success(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
+    """When config generation succeeds, no validation error is flagged."""
     state_in = State(
         relations=[s3, all_worker],
         containers=[nginx_container, nginx_prometheus_exporter_container],
@@ -135,13 +135,11 @@ def test_validation_wrapper_caches_valid_config(context, s3, all_worker, nginx_c
     with context(context.on.relation_joined(all_worker), state_in) as mgr:
         state_out = mgr.run()
 
-        # The charm should have a cached config and no validation error
-        assert mgr.charm._last_valid_config != ""
         assert mgr.charm._config_validation_error is False
 
 
-def test_validation_wrapper_returns_cached_on_failure(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
-    """When config validation fails, the wrapper returns the last cached config and sets a flag."""
+def test_validation_wrapper_returns_existing_config_on_failure(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
+    """When config validation fails, the wrapper returns the config already in relation data."""
     from pydantic import ValidationError
 
     from src.mimir_config import ShardingRing
@@ -154,8 +152,15 @@ def test_validation_wrapper_returns_cached_on_failure(context, s3, all_worker, n
 
     with context(context.on.relation_joined(all_worker), state_in) as mgr:
         state_out = mgr.run()
-        cached = mgr.charm._last_valid_config
-        assert cached != ""
+
+        # Grab the config that was published during the successful run
+        import json
+        published = None
+        for rel in state_out.relations:
+            if rel.endpoint == "mimir-cluster" and "worker_config" in rel.local_app_data:
+                published = json.loads(rel.local_app_data["worker_config"])
+                break
+        assert published
 
         # Now simulate a validation failure
         try:
@@ -164,7 +169,8 @@ def test_validation_wrapper_returns_cached_on_failure(context, s3, all_worker, n
             mgr.charm._mimir_config.config = MagicMock(side_effect=exc)
 
         result = mgr.charm._validated_workers_config(MagicMock())
-        assert result == cached
+        # Should return the config already in the databag (no change for workers)
+        assert result == published
         assert mgr.charm._config_validation_error is True
 
 

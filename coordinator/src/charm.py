@@ -11,6 +11,7 @@ https://discourse.charmhub.io/t/4208
 """
 
 import hashlib
+import json
 import logging
 import socket
 from typing import Any, Dict, List, Optional, Union, cast
@@ -79,7 +80,6 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             max_global_exemplars_per_user=int(self.config["max_global_exemplars_per_user"]),
             metrics_retention_period=self.retention_period if is_valid_timespec(self.retention_period) else None,
         )
-        self._last_valid_config: str = ""
         self._config_validation_error: bool = False
         self.coordinator = Coordinator(
             charm=self,
@@ -422,19 +422,28 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def _validated_workers_config(self, coordinator: Coordinator) -> str:
         """Wrap MimirConfig.config() with Pydantic validation error handling.
 
-        On success the generated config is cached and returned.
-        On ValidationError the last known valid config is returned so that workers
-        are never disrupted by an invalid configuration.
+        On success the config is returned normally.
+        On ValidationError the error is logged, a flag is set for status reporting,
+        and the config currently in the relation databag is returned so that
+        publish_data writes back the same value (Juju sees no delta, workers
+        are unaffected).
         """
         try:
             config = self._mimir_config.config(coordinator)
-            self._last_valid_config = config
             self._config_validation_error = False
             return config
         except ValidationError as e:
             logger.error("Mimir config validation failed: %s", e)
             self._config_validation_error = True
-            return self._last_valid_config
+            return self._current_worker_config()
+
+    def _current_worker_config(self) -> str:
+        """Read the worker_config currently published in the cluster relation databag."""
+        for relation in self.model.relations.get("mimir-cluster", []):
+            databag = relation.data.get(self.app, {})
+            if raw := databag.get("worker_config"):
+                return json.loads(raw)
+        return ""
 
     def _on_collect_unit_status(self, event: ops.CollectStatusEvent):
         event.add_status(ActiveStatus())
