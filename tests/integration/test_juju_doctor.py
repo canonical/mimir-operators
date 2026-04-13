@@ -1,6 +1,6 @@
 import pytest
 import sh
-from helpers import charm_resources, configure_minio, configure_s3_integrator
+from helpers import charm_resources, configure_minio, configure_s3_integrator, wait_with_resolve
 from jubilant import Juju, all_active, all_blocked
 
 
@@ -56,8 +56,10 @@ def test_all_active_when_coordinator_and_s3_added(juju: Juju, mimir_charm):
     juju.integrate("mimir:mimir-cluster", "backend")
 
     # THEN both the coordinator and the workers become active
-    juju.wait(
+    wait_with_resolve(
+        juju,
         lambda status: all_active(status, "mimir", "read", "write", "backend"),
+        "read", "write", "backend",
         timeout=5000,
     )
 

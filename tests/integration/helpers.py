@@ -1,4 +1,7 @@
 import json
+import logging
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -18,7 +21,72 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import format_trace_id
 from tenacity import retry, stop_after_attempt, wait_fixed
 
+logger = logging.getLogger(__name__)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def wait_with_resolve(
+    juju: jubilant.Juju,
+    ready: Callable[[jubilant.Status], bool],
+    *apps: str,
+    timeout: float = 5000,
+    resolve_limit: int = 5,
+) -> jubilant.Status:
+    """Wait for ``ready`` while automatically resolving transient hook errors.
+
+    Worker charms occasionally hit transient Pebble / K8s race conditions that
+    put units into ``error`` state.  Rather than timing out, this helper detects
+    errored units in *apps* (or all apps when *apps* is empty), calls
+    ``juju resolved`` for each, and keeps waiting.
+
+    A per-unit resolve counter prevents infinite loops: after *resolve_limit*
+    resolves for the same unit, the function raises ``TimeoutError``.
+    """
+    resolve_counts: dict[str, int] = {}
+    deadline = time.monotonic() + timeout
+
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"Timed out after {timeout}s waiting for ready predicate")
+
+        try:
+            return juju.wait(ready, timeout=min(remaining, 120))
+        except TimeoutError:
+            status = juju.status()
+            resolved_any = False
+            target_apps = set(apps) if apps else set(status.apps)
+            for app_name in target_apps:
+                app = status.apps.get(app_name)
+                if not app:
+                    continue
+                for unit_name, unit in app.units.items():
+                    if unit.workload_status.current == "error":
+                        count = resolve_counts.get(unit_name, 0)
+                        if count >= resolve_limit:
+                            raise TimeoutError(
+                                f"Unit {unit_name} entered error state {count} times, "
+                                f"exceeding resolve limit of {resolve_limit}"
+                            )
+                        logger.warning(
+                            "Resolving errored unit %s (attempt %d/%d): %s",
+                            unit_name,
+                            count + 1,
+                            resolve_limit,
+                            unit.workload_status.message,
+                        )
+                        try:
+                            juju.cli("resolved", unit_name)
+                        except Exception as e:
+                            logger.warning("Failed to resolve %s: %s", unit_name, e)
+                        resolve_counts[unit_name] = count + 1
+                        resolved_any = True
+
+            if not resolved_any:
+                if deadline - time.monotonic() <= 0:
+                    raise
+                continue
 
 
 def charm_resources(metadata_file: str | None = None) -> dict[str, str]:
