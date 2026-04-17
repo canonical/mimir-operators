@@ -17,8 +17,7 @@ description: |
 
   Key features:
 
-  - Centralized management of all external integrations, including metrics ingestion via the
-    Prometheus remote write protocol, Alertmanager, Grafana, and Prometheus.
+  - Centralized management of all external integrations, including metrics ingestion via `prometheus_remote_write`, visualization and data source integration with Grafana, and alerting through Alertmanager.
   - Prometheus-compatible API, allowing Mimir to be used as a drop-in long-term storage
     backend for Prometheus metrics.
   - Automatic configuration distribution to Mimir Worker units via the mimir-cluster relation.
