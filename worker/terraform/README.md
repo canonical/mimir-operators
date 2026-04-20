@@ -38,7 +38,8 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_app_name"></a> [app\_name](#output\_app\_name) | n/a |
-| <a name="output_endpoints"></a> [endpoints](#output\_endpoints) | n/a |
+| <a name="output_provides"></a> [provides](#output\_provides) | All Juju integration endpoints where the charm is the provider |
+| <a name="output_requires"></a> [requires](#output\_requires) | All Juju integration endpoints where the charm is the requirer |
 <!-- END_TF_DOCS -->
 
 ## Usage

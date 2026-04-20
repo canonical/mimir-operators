@@ -117,12 +117,12 @@ resource "juju_integration" "coordinator_to_read" {
 
   application {
     name     = module.mimir_coordinator.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_coordinator.provides.mimir_cluster
   }
 
   application {
     name     = module.mimir_read.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_read.requires.mimir_cluster
   }
 }
 
@@ -131,12 +131,12 @@ resource "juju_integration" "coordinator_to_write" {
 
   application {
     name     = module.mimir_coordinator.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_coordinator.provides.mimir_cluster
   }
 
   application {
     name     = module.mimir_write.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_write.requires.mimir_cluster
   }
 }
 
@@ -145,11 +145,11 @@ resource "juju_integration" "coordinator_to_backend" {
 
   application {
     name     = module.mimir_coordinator.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_coordinator.provides.mimir_cluster
   }
 
   application {
     name     = module.mimir_backend.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_backend.requires.mimir_cluster
   }
 }
