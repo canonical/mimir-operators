@@ -4,7 +4,30 @@ name: mimir-coordinator-k8s
 type: charm
 summary: Mimir coordinator
 description: |
-  Mimir coordinator.
+  Mimir Coordinator K8s is a Juju charm that manages the configuration, routing, and external
+  integrations for a horizontally scalable Grafana Mimir deployment on Kubernetes. It works
+  together with the Mimir Worker charm, following the coordinated-workers pattern. It is a
+  component of the Canonical Observability Stack (COS):
+  https://documentation.ubuntu.com/observability
+
+  The coordinator handles all external relations — such as metrics ingestion via Prometheus
+  remote write, alerting, Grafana datasources, and dashboards — and distributes the generated
+  Mimir configuration to the worker units. An nginx reverse proxy routes incoming traffic to
+  the appropriate workers based on their assigned roles.
+
+  Key features:
+
+  - Centralized management of all external integrations, including metrics ingestion via `prometheus_remote_write`, visualization and data source integration with Grafana, and alerting through Alertmanager.
+  - Prometheus-compatible API, allowing Mimir to be used as a drop-in long-term storage
+    backend for Prometheus metrics.
+  - Automatic configuration distribution to Mimir Worker units via the mimir-cluster relation.
+  - Built-in nginx reverse proxy for load balancing and traffic routing across workers.
+  - S3-compatible object storage integration for scalable metrics data persistence.
+  - Built-in Grafana dashboards and Prometheus alert rules for self-monitoring.
+  - Configurable metrics retention period and exemplar storage limits.
+  - TLS support via the certificates relation.
+  - Ingress support for external access through reverse proxies such as Traefik.
+  - Distributed tracing support via integration with Tempo.
 
 links:
   documentation: https://discourse.charmhub.io/t/mimir-coordinator-index/10531
