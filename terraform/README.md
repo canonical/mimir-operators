@@ -71,7 +71,8 @@ This is a Terraform module facilitating the deployment of Mimir solution, using 
 | Name | Description |
 |------|-------------|
 | <a name="output_app_names"></a> [app\_names](#output\_app\_names) | All application names which make up this product module |
-| <a name="output_endpoints"></a> [endpoints](#output\_endpoints) | All Juju integration endpoints which make up this product module |
+| <a name="output_provides"></a> [provides](#output\_provides) | All Juju integration endpoints where the charm is the provider |
+| <a name="output_requires"></a> [requires](#output\_requires) | All Juju integration endpoints where the charm is the requirer |
 <!-- END_TF_DOCS -->
 
 ## Usage
