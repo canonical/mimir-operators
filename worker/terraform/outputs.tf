@@ -2,10 +2,14 @@ output "app_name" {
   value = juju_application.mimir_worker.name
 }
 
-output "endpoints" {
+output "provides" {
+  value       = {}
+  description = "All Juju integration endpoints where the charm is the provider"
+}
+
+output "requires" {
   value = {
-    # Requires
     mimir_cluster = "mimir-cluster"
-    # Provides
   }
+  description = "All Juju integration endpoints where the charm is the requirer"
 }
