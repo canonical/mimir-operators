@@ -6,13 +6,9 @@ import logging
 from typing import Dict, List
 
 from coordinated_workers.nginx import (
-    CA_CERT_PATH,
-    CERT_PATH,
-    KEY_PATH,
     NginxLocationConfig,
     NginxUpstream,
 )
-from ops import Container
 
 from mimir_config import MimirRole
 
@@ -56,28 +52,26 @@ class NginxHelper:
     _port = 8080
     _tls_port = 443
 
-    def __init__(self, container: Container):
-        self._container = container
-
     def upstreams(self) -> List[NginxUpstream]:
         """Generate the list of Nginx upstream metadata configurations."""
         return [NginxUpstream(role.value, self._port, role.value) for role in MimirRole]
 
     def server_ports_to_locations(self) -> Dict[int, List[NginxLocationConfig]]:
-        """Generate a mapping from server ports to a list of Nginx location configurations."""
-        return {
-            self._tls_port if self._tls_available else self._port: self._locations_distributor
+        """Generate a mapping from server ports to a list of Nginx location configurations.
+
+        Locations are provided for both the plain HTTP and TLS ports so that the
+        nginx server block is valid regardless of when TLS certificates become
+        available.  The Coordinator library controls which port actually receives
+        traffic via ``listen_tls`` and ``unit.set_ports``.
+        """
+        all_locations = (
+            self._locations_distributor
             + self._locations_ruler
             + self._locations_alertmanager
             + self._locations_query_frontend
             + self._locations_compactor
-        }
-
-    @property
-    def _tls_available(self) -> bool:
-        return (
-            self._container.can_connect()
-            and self._container.exists(CERT_PATH)
-            and self._container.exists(KEY_PATH)
-            and self._container.exists(CA_CERT_PATH)
         )
+        return {
+            self._port: all_locations,
+            self._tls_port: all_locations,
+        }

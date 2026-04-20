@@ -37,6 +37,7 @@ from coordinated_workers.telemetry_correlation import TelemetryCorrelation
 from coordinated_workers.worker_telemetry import WorkerTelemetryProxyConfig
 from cosl import JujuTopology
 from cosl.interfaces.datasource_exchange import DatasourceDict
+from cosl.reconciler import all_events, observe_events
 from cosl.time_validation import is_valid_timespec
 from ops import ActiveStatus, BlockedStatus
 from ops.model import ModelError
@@ -64,7 +65,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self._nginx_prometheus_exporter_container = self.unit.get_container(
             "nginx-prometheus-exporter"
         )
-        self._nginx_helper = NginxHelper(self._nginx_container)
+        self._nginx_helper = NginxHelper()
         self.ingress = IngressPerAppRequirer(
             charm=self,
             strip_prefix=True,
@@ -148,7 +149,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             return
 
         # do this regardless of what event we are processing
-        self._reconcile()
+        observe_events(self, all_events, self._reconcile)
 
         ######################################
         # === EVENT HANDLER REGISTRATION === #
@@ -359,9 +360,10 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             # Update the alert rules files on disk
             self._nginx_container.remove_path(RULES_DIR, recursive=True)
             rules_file_paths: List[str] = self._push_alert_rules(remote_write_alerts)
-            self._push(ALERTS_HASH_PATH, alerts_hash)
-            # Push the alert rules to the Mimir cluster (persisted in s3)
-            mimirtool_output = self._nginx_container.pebble.exec(
+            # Push the alert rules to the Mimir cluster (persisted in s3).
+            # wait_output() raises ExecError on non-zero exit, which will put
+            # the unit in error state so Juju retries the hook.
+            process = self._nginx_container.pebble.exec(
                 [
                     "mimirtool",
                     "rules",
@@ -372,10 +374,13 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 ],
                 encoding="utf-8",
             )
-            if mimirtool_output.stdout:
-                logger.info(f"mimirtool: {mimirtool_output.stdout.read().strip()}")
-            if mimirtool_output.stderr:
-                logger.error(f"mimirtool (err): {mimirtool_output.stderr.read().strip()}")
+            stdout, stderr = process.wait_output()
+            if stdout:
+                logger.info(f"mimirtool: {stdout.strip()}")
+            if stderr:
+                logger.warning(f"mimirtool (stderr): {stderr.strip()}")
+            # Only persist hash after successful sync so the next event retries on failure.
+            self._push(ALERTS_HASH_PATH, alerts_hash)
 
     def _update_prometheus_api(self) -> None:
         """Update all applications related to us via the prometheus-api relation."""
@@ -421,12 +426,11 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             logger.info(f"Suspending data deletion due to invalid option set in config: {self.retention_period}. To resume data deletion, please reset value to a valid option.")
             event.add_status(BlockedStatus(f"Invalid config option (see debug-log): retention_period={self.retention_period}"))
 
-    def _reconcile(self):
+    def _reconcile(self, _=None):
         # This method contains unconditional update logic, i.e. logic that should be executed
         # regardless of the event we are processing.
         if self._nginx_container.can_connect():
             self._set_alerts()
-        self._ensure_mimirtool()
         self._update_prometheus_api()
         self._update_datasource_exchange()
         self.grafana_source.update_source(source_url=f"{self.most_external_url}/prometheus")

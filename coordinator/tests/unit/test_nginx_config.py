@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from coordinated_workers.nginx import NginxConfig
@@ -17,11 +17,10 @@ def mock_ipv6(enable: bool):
 def nginx_config():
     def _nginx_config(tls=False, ipv6=True):
         with mock_ipv6(ipv6):
-            with patch.object(NginxHelper, "_tls_available", new=PropertyMock(return_value=tls)):
-                nginx_helper = NginxHelper(MagicMock())
-                return NginxConfig(server_name="localhost",
-                                    upstream_configs=nginx_helper.upstreams(),
-                                    server_ports_to_locations=nginx_helper.server_ports_to_locations())
+            nginx_helper = NginxHelper()
+            return NginxConfig(server_name="localhost",
+                                upstream_configs=nginx_helper.upstreams(),
+                                server_ports_to_locations=nginx_helper.server_ports_to_locations())
     return _nginx_config
 
 
@@ -88,14 +87,26 @@ def test_upstreams_config(nginx_config, coordinator, addresses_by_role):
 @pytest.mark.parametrize("tls", (True, False))
 @pytest.mark.parametrize("ipv6", (True, False))
 def test_servers_config(ipv6, tls, nginx_config):
-    port = 8080
     server_config = nginx_config(tls=tls, ipv6=ipv6).get_config(
         {"distributor": ["address.one"]}, tls
     )
-    ipv4_args = "443 ssl" if tls else f"{port}"
-    assert f"listen {ipv4_args}" in  server_config
-    ipv6_args = "[::]:443 ssl" if tls else f"[::]:{port}"
-    if ipv6:
-        assert f"listen {ipv6_args}" in server_config
+    # Both ports (8080 and 443) always get location blocks.
+    # When tls=True, both server blocks carry the 'ssl' directive;
+    # when tls=False, neither does.
+    if tls:
+        assert "listen 443 ssl" in server_config
+        assert "listen 8080 ssl" in server_config
     else:
-        assert f"listen {ipv6_args}" not in server_config
+        assert "listen 8080" in server_config
+        assert "listen 443" in server_config
+        assert "ssl" not in server_config
+
+    if ipv6:
+        if tls:
+            assert "listen [::]:443 ssl" in server_config
+            assert "listen [::]:8080 ssl" in server_config
+        else:
+            assert "listen [::]:8080" in server_config
+            assert "listen [::]:443" in server_config
+    else:
+        assert "[::]:" not in server_config
