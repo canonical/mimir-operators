@@ -38,7 +38,7 @@ resource "juju_application" "s3_integrator" {
 }
 
 module "mimir_coordinator" {
-  source             = "git::https://github.com/canonical/mimir-operators//coordinator/terraform"
+  source             = "../coordinator/terraform"
   app_name           = "mimir"
   channel            = var.channel
   config             = var.coordinator_config
@@ -50,7 +50,7 @@ module "mimir_coordinator" {
 }
 
 module "mimir_backend" {
-  source     = "git::https://github.com/canonical/mimir-operators//worker/terraform"
+  source     = "../worker/terraform"
   depends_on = [module.mimir_coordinator]
 
   app_name    = var.backend_name
@@ -66,7 +66,7 @@ module "mimir_backend" {
 }
 
 module "mimir_read" {
-  source     = "git::https://github.com/canonical/mimir-operators//worker/terraform"
+  source     = "../worker/terraform"
   depends_on = [module.mimir_coordinator]
 
   app_name = var.read_name
@@ -82,7 +82,7 @@ module "mimir_read" {
 }
 
 module "mimir_write" {
-  source     = "git::https://github.com/canonical/mimir-operators//worker/terraform"
+  source     = "../worker/terraform"
   depends_on = [module.mimir_coordinator]
 
   app_name = var.write_name
@@ -117,12 +117,12 @@ resource "juju_integration" "coordinator_to_read" {
 
   application {
     name     = module.mimir_coordinator.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_coordinator.provides.mimir_cluster
   }
 
   application {
     name     = module.mimir_read.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_read.requires.mimir_cluster
   }
 }
 
@@ -131,12 +131,12 @@ resource "juju_integration" "coordinator_to_write" {
 
   application {
     name     = module.mimir_coordinator.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_coordinator.provides.mimir_cluster
   }
 
   application {
     name     = module.mimir_write.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_write.requires.mimir_cluster
   }
 }
 
@@ -145,11 +145,11 @@ resource "juju_integration" "coordinator_to_backend" {
 
   application {
     name     = module.mimir_coordinator.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_coordinator.provides.mimir_cluster
   }
 
   application {
     name     = module.mimir_backend.app_name
-    endpoint = "mimir-cluster"
+    endpoint = module.mimir_backend.requires.mimir_cluster
   }
 }
