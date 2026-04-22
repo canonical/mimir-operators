@@ -233,25 +233,27 @@ class MimirConfig:
 
     # scheduler_address:
     # Address of the query-scheduler component, in host:port format.
+    # The host should resolve to all query-scheduler instances (single address, not a list).
     # When set, the query-frontend registers with the scheduler and
     # queriers pull queries from it instead of connecting directly.
     def _build_frontend_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
         scheduler_addrs = self._get_grpc_addresses(cluster, "query-scheduler")
         if scheduler_addrs:
-            return {"scheduler_address": ",".join(scheduler_addrs)}
+            return {"scheduler_address": scheduler_addrs[0]}
         return {}
 
     # frontend_address / scheduler_address:
     # Configures queriers to connect to query-frontends (or query-schedulers).
     # Prefers query-scheduler when available.
+    # Both fields expect a single host:port address.
     def _build_frontend_worker_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
         scheduler_addrs = self._get_grpc_addresses(cluster, "query-scheduler")
         if scheduler_addrs:
-            return {"scheduler_address": ",".join(scheduler_addrs)}
+            return {"scheduler_address": scheduler_addrs[0]}
 
         frontend_addrs = self._get_grpc_addresses(cluster, "query-frontend")
         if frontend_addrs:
-            return {"frontend_address": ",".join(frontend_addrs)}
+            return {"frontend_address": frontend_addrs[0]}
 
         return {}
 
