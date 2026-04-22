@@ -59,7 +59,7 @@ resources:
   mimir-image:
     type: oci-image
     description: OCI image for Grafana Mimir
-    upstream-source: docker.io/ubuntu/mimir@sha256:25fbfd198eca3b56267328c9c279e4e40724b0f55269dad12f884e93c09568f4  # renovate: oci-image tag: 2.17-24.04
+    upstream-source: docker.io/ubuntu/mimir@sha256:55936de2a6948e9f9bff9c4a6d94b6cc9431f6a429f0e3b0b97237cd4bf63f90  # renovate: oci-image tag: 3.0-24.04
 
 storage:
   data:

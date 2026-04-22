@@ -62,6 +62,7 @@ META_ROLES = {
         MimirRole.ingester,
         MimirRole.querier,
         MimirRole.query_frontend,
+        MimirRole.query_scheduler,
         MimirRole.ruler,
         MimirRole.store_gateway,
     },
@@ -74,6 +75,8 @@ MINIMAL_DEPLOYMENT = {
     MimirRole.ingester,
     MimirRole.querier,
     MimirRole.query_frontend,
+    # The query_scheduler became required starting in Mimir 3.0.
+    MimirRole.query_scheduler,
     MimirRole.store_gateway,
     # we add:
     MimirRole.ruler,
@@ -88,6 +91,7 @@ RECOMMENDED_DEPLOYMENT = {
     MimirRole.ingester.value: 3,
     MimirRole.querier.value: 2,
     MimirRole.query_frontend.value: 1,
+    MimirRole.query_scheduler.value: 1,
     MimirRole.store_gateway.value: 1,
     MimirRole.ruler: 1,
 }

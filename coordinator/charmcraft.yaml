@@ -57,7 +57,7 @@ parts:
         mode: "755"
   mimirtool:
     plugin: dump
-    source: https://github.com/grafana/mimir/releases/download/mimir-2.14.2/mimirtool-linux-${CRAFT_ARCH_BUILD_FOR}
+    source: https://github.com/grafana/mimir/releases/download/mimir-3.0.5/mimirtool-linux-${CRAFT_ARCH_BUILD_FOR}
     source-type: file
     permissions:
       - path: mimirtool-linux-${CRAFT_ARCH_BUILD_FOR}
