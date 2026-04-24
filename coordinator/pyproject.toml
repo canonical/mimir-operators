@@ -48,7 +48,10 @@ fail_under = 85
 asyncio_mode = "auto"
 minversion = "6.0"
 log_cli_level = "INFO"
-markers = ['setup: marks tests as setup (deselect with -m "not setup")']
+markers = [
+  'setup: marks tests as setup (deselect with -m "not setup")',
+  'abort_on_fail: abort remaining tests in the module on first failure',
+]
 addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 
 # Linting tools configuration
