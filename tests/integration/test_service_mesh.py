@@ -55,6 +55,8 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel, me
         ),
         timeout=1000,
     )
+
+    juju.integrate("mimir:s3", "s3")
     juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
@@ -83,7 +85,6 @@ def test_deploy_workers(juju: jubilant.Juju, cos_channel):
 
 @pytest.mark.abort_on_fail
 def test_integrate(juju: jubilant.Juju):
-    juju.integrate("mimir:s3", "s3")
     juju.integrate("mimir:mimir-cluster", "worker")
     juju.integrate("mimir:self-metrics-endpoint", "prometheus")
     juju.integrate("mimir:grafana-dashboards-provider", "grafana")

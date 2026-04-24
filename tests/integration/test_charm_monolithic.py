@@ -16,8 +16,7 @@ from helpers import (
     get_grafana_datasources_from_client_localhost,
     get_prometheus_targets_from_client_localhost,
     get_traefik_proxied_endpoints,
-    push_to_otelcol,
-    query_exemplars,
+    push_and_verify_exemplars,
     query_mimir_from_client_localhost,
 )
 from tenacity import retry, stop_after_attempt, wait_fixed
@@ -51,6 +50,11 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
         lambda s: jubilant.all_active(s, "prometheus", "loki", "grafana", "minio", "s3", "otelcol"),
         timeout=1000,
     )
+
+    # Integrate S3 early so the coordinator has storage config before workers join.
+    # This avoids a race where workers read an empty cluster databag because
+    # the coordinator's can_handle_events requires s3_ready.
+    juju.integrate("mimir:s3", "s3")
     juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
@@ -69,7 +73,6 @@ def test_deploy_workers(juju: jubilant.Juju, cos_channel):
 
 @pytest.mark.abort_on_fail
 def test_integrate(juju: jubilant.Juju):
-    juju.integrate("mimir:s3", "s3")
     juju.integrate("mimir:mimir-cluster", "worker")
     juju.integrate("mimir:self-metrics-endpoint", "prometheus")
     juju.integrate("mimir:grafana-dashboards-provider", "grafana")
@@ -126,8 +129,4 @@ def test_traefik(juju: jubilant.Juju):
 
 def test_exemplars(juju: jubilant.Juju):
     """Check that Mimir successfully receives and stores exemplars."""
-    metric_name = "sample_metric"
-    trace_id = push_to_otelcol(juju, metric_name=metric_name)
-
-    found_trace_id = query_exemplars(juju, query_name=metric_name, coordinator_app="mimir")
-    assert found_trace_id == trace_id
+    push_and_verify_exemplars(juju, coordinator_app="mimir")
