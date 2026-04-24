@@ -50,9 +50,19 @@ def get_unit_address(juju: jubilant.Juju, app_name: str, unit_no: int) -> str:
     return unit.address
 
 
+@retry(wait=wait_fixed(5), stop=stop_after_attempt(12))
+def _wait_for_minio_ready(minio_addr: str):
+    """Poll MinIO's readiness endpoint until the S3 API is actually serving."""
+    response = requests.get(f"http://{minio_addr}:9000/minio/health/ready", timeout=5)
+    assert response.status_code == 200, (
+        f"MinIO readiness check returned HTTP {response.status_code}"
+    )
+
+
 def configure_minio(juju: jubilant.Juju):
     bucket_name = "mimir"
     minio_addr = get_leader_address(juju, "minio")
+    _wait_for_minio_ready(minio_addr)
     mc_client = Minio(
         f"{minio_addr}:9000",
         access_key="access",
