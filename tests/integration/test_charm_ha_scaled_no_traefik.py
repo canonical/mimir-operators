@@ -30,7 +30,7 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
         resources=charm_resources(),
         trust=True,
     )
-    juju.deploy("grafana-agent-k8s", "agent", channel=cos_channel, trust=True)
+    juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
     # Secret must be at least 8 characters: https://github.com/canonical/minio-operator/issues/137
     juju.deploy(
         "minio",
@@ -45,10 +45,10 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     configure_s3_integrator(juju)
 
     juju.wait(
-        lambda s: jubilant.all_active(s, "minio", "s3"),
+        lambda s: jubilant.all_active(s, "minio", "s3", "otelcol"),
         timeout=1000,
     )
-    juju.wait(lambda s: jubilant.all_blocked(s, "mimir", "agent"), timeout=1000)
+    juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
 @pytest.mark.abort_on_fail
@@ -90,7 +90,7 @@ def test_integrate(juju: jubilant.Juju):
     juju.integrate("mimir:mimir-cluster", "worker-read")
     juju.integrate("mimir:mimir-cluster", "worker-write")
     juju.integrate("mimir:mimir-cluster", "worker-backend")
-    juju.integrate("mimir:receive-remote-write", "agent")
+    juju.integrate("mimir:receive-remote-write", "otelcol:send-remote-write")
 
     juju.wait(
         lambda s: jubilant.all_active(

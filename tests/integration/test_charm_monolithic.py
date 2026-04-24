@@ -32,7 +32,6 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     juju.deploy("prometheus-k8s", "prometheus", channel=cos_channel, trust=True)
     juju.deploy("loki-k8s", "loki", channel=cos_channel, trust=True)
     juju.deploy("grafana-k8s", "grafana", channel=cos_channel, trust=True)
-    juju.deploy("grafana-agent-k8s", "agent", channel=cos_channel)
     juju.deploy("traefik-k8s", "traefik", channel="latest/edge", trust=True)
     juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
     # Secret must be at least 8 characters: https://github.com/canonical/minio-operator/issues/137
@@ -52,7 +51,7 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
         lambda s: jubilant.all_active(s, "prometheus", "loki", "grafana", "minio", "s3", "otelcol"),
         timeout=1000,
     )
-    juju.wait(lambda s: jubilant.all_blocked(s, "mimir", "agent"), timeout=1000)
+    juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
 @pytest.mark.abort_on_fail
@@ -77,13 +76,12 @@ def test_integrate(juju: jubilant.Juju):
     juju.integrate("mimir:grafana-source", "grafana")
     juju.integrate("mimir:logging-consumer", "loki")
     juju.integrate("mimir:ingress", "traefik")
-    juju.integrate("mimir:receive-remote-write", "agent")
-    juju.integrate("agent:metrics-endpoint", "grafana")
     juju.integrate("mimir:receive-remote-write", "otelcol:send-remote-write")
+    juju.integrate("otelcol:metrics-endpoint", "grafana:metrics-endpoint")
 
     juju.wait(
         lambda s: jubilant.all_active(
-            s, "mimir", "prometheus", "loki", "grafana", "agent",
+            s, "mimir", "prometheus", "loki", "grafana", "otelcol",
             "minio", "s3", "worker", "traefik",
         ),
         timeout=2000,
@@ -111,11 +109,12 @@ def test_metrics_endpoint(juju: jubilant.Juju):
 
 @retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_metrics_in_mimir(juju: jubilant.Juju):
-    """Check that the agent metrics appear in Mimir."""
-    result = query_mimir_from_client_localhost(juju, query='up{juju_charm=~"grafana-agent-k8s"}')
+    """Check that otelcol-scraped metrics appear in Mimir."""
+    result = query_mimir_from_client_localhost(juju, query='up{juju_charm=~"grafana-k8s"}')
     assert result
 
 
+@retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_traefik(juju: jubilant.Juju):
     """Check the ingress integration, by checking if Mimir is reachable through Traefik."""
     proxied_endpoints = get_traefik_proxied_endpoints(juju)
