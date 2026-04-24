@@ -1,10 +1,10 @@
 [project]
 name = "mimir-worker-k8s"
 version = "0.0"
-requires-python = "~=3.10"  # https://packages.ubuntu.com/jammy/python3
+requires-python = "~=3.12.0"
 
 dependencies = [
-  "coordinated-workers",
+  "coordinated-workers>=3.0.0",
   "charmed-service-mesh-helpers>=0.2.0",
   "lightkube-extensions",
 ]
