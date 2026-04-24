@@ -82,23 +82,10 @@ MINIMAL_DEPLOYMENT = {
 deployment to be considered consistent (otherwise we set blocked). On top of what mimir itself lists as required,
 we add alertmanager."""
 
-RECOMMENDED_DEPLOYMENT = {
-    MimirRole.compactor.value: 1,
-    MimirRole.distributor.value: 1,
-    MimirRole.ingester.value: 3,
-    MimirRole.querier.value: 2,
-    MimirRole.query_frontend.value: 1,
-    MimirRole.store_gateway.value: 1,
-    MimirRole.ruler: 1,
-}
-"""The set of roles that need to be allocated for the
-deployment to be considered robust according to the official recommendations/guidelines."""
-
 MIMIR_ROLES_CONFIG = ClusterRolesConfig(
     roles=set(MimirRole),
     meta_roles=META_ROLES,
     minimal_deployment=MINIMAL_DEPLOYMENT,
-    recommended_deployment=RECOMMENDED_DEPLOYMENT,
 )
 """Define the configuration for Mimir roles."""
 
