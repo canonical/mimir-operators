@@ -13,6 +13,12 @@ variable "channel" {
   }
 }
 
+variable "monolithic" {
+  description = "Deploy Mimir in monolithic mode with a single all-in-one worker instead of separate backend/read/write workers"
+  type        = bool
+  default     = false
+}
+
 variable "anti_affinity" {
   description = "Enable anti-affinity constraints."
   type        = bool
@@ -63,6 +69,12 @@ variable "write_name" {
   default     = "mimir-write"
 }
 
+variable "all_name" {
+  description = "Name of the Mimir all-in-one worker app"
+  type        = string
+  default     = "mimir-worker"
+}
+
 variable "backend_name" {
   description = "Name of the Mimir backend (meta role) app"
   type        = string
@@ -79,6 +91,12 @@ variable "s3_integrator_name" {
 
 variable "coordinator_config" {
   description = "Map of the coordinator configuration options"
+  type        = map(string)
+  default     = {}
+}
+
+variable "all_config" {
+  description = "Map of the all-in-one worker configuration options"
   type        = map(string)
   default     = {}
 }
@@ -177,6 +195,12 @@ variable "coordinator_storage_directives" {
   default     = {}
 }
 
+variable "all_worker_storage_directives" {
+  description = "Map of storage used by the all-in-one worker application, which defaults to 1 GB, allocated by Juju"
+  type        = map(string)
+  default     = {}
+}
+
 variable "backend_worker_storage_directives" {
   description = "Map of storage used by the backend worker application, which defaults to 1 GB, allocated by Juju"
   type        = map(string)
@@ -202,6 +226,16 @@ variable "s3_integrator_storage_directives" {
 }
 
 # -------------- # Units Per App --------------
+
+variable "all_units" {
+  description = "Number of Mimir worker units with the all-in-one role"
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.all_units >= 1
+    error_message = "The number of units must be greater than or equal to 1."
+  }
+}
 
 variable "read_units" {
   description = "Number of Mimir worker units with the read meta role"

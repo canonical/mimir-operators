@@ -49,8 +49,26 @@ module "mimir_coordinator" {
   units              = var.coordinator_units
 }
 
+module "mimir_all" {
+  source     = "../worker/terraform"
+  count      = var.monolithic ? 1 : 0
+  depends_on = [module.mimir_coordinator]
+
+  app_name    = var.all_name
+  channel     = var.channel
+  constraints = var.anti_affinity ? "arch=amd64 tags=anti-pod.app.kubernetes.io/name=${var.all_name},anti-pod.topology-key=kubernetes.io/hostname" : var.worker_constraints
+  config = merge({
+    role-all = true
+  }, var.all_config)
+  model_uuid         = var.model_uuid
+  revision           = var.worker_revision
+  storage_directives = var.all_worker_storage_directives
+  units              = var.all_units
+}
+
 module "mimir_backend" {
   source     = "../worker/terraform"
+  count      = var.monolithic ? 0 : 1
   depends_on = [module.mimir_coordinator]
 
   app_name    = var.backend_name
@@ -67,6 +85,7 @@ module "mimir_backend" {
 
 module "mimir_read" {
   source     = "../worker/terraform"
+  count      = var.monolithic ? 0 : 1
   depends_on = [module.mimir_coordinator]
 
   app_name = var.read_name
@@ -83,6 +102,7 @@ module "mimir_read" {
 
 module "mimir_write" {
   source     = "../worker/terraform"
+  count      = var.monolithic ? 0 : 1
   depends_on = [module.mimir_coordinator]
 
   app_name = var.write_name
@@ -112,7 +132,8 @@ resource "juju_integration" "coordinator_to_s3_integrator" {
   }
 }
 
-resource "juju_integration" "coordinator_to_read" {
+resource "juju_integration" "coordinator_to_all" {
+  count      = var.monolithic ? 1 : 0
   model_uuid = var.model_uuid
 
   application {
@@ -121,12 +142,28 @@ resource "juju_integration" "coordinator_to_read" {
   }
 
   application {
-    name     = module.mimir_read.app_name
-    endpoint = module.mimir_read.requires.mimir_cluster
+    name     = module.mimir_all[0].app_name
+    endpoint = module.mimir_all[0].requires.mimir_cluster
+  }
+}
+
+resource "juju_integration" "coordinator_to_read" {
+  count      = var.monolithic ? 0 : 1
+  model_uuid = var.model_uuid
+
+  application {
+    name     = module.mimir_coordinator.app_name
+    endpoint = module.mimir_coordinator.provides.mimir_cluster
+  }
+
+  application {
+    name     = module.mimir_read[0].app_name
+    endpoint = module.mimir_read[0].requires.mimir_cluster
   }
 }
 
 resource "juju_integration" "coordinator_to_write" {
+  count      = var.monolithic ? 0 : 1
   model_uuid = var.model_uuid
 
   application {
@@ -135,12 +172,13 @@ resource "juju_integration" "coordinator_to_write" {
   }
 
   application {
-    name     = module.mimir_write.app_name
-    endpoint = module.mimir_write.requires.mimir_cluster
+    name     = module.mimir_write[0].app_name
+    endpoint = module.mimir_write[0].requires.mimir_cluster
   }
 }
 
 resource "juju_integration" "coordinator_to_backend" {
+  count      = var.monolithic ? 0 : 1
   model_uuid = var.model_uuid
 
   application {
@@ -149,7 +187,7 @@ resource "juju_integration" "coordinator_to_backend" {
   }
 
   application {
-    name     = module.mimir_backend.app_name
-    endpoint = module.mimir_backend.requires.mimir_cluster
+    name     = module.mimir_backend[0].app_name
+    endpoint = module.mimir_backend[0].requires.mimir_cluster
   }
 }

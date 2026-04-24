@@ -3,9 +3,10 @@ output "app_names" {
     {
       mimir_s3_integrator = juju_application.s3_integrator.name,
       mimir_coordinator   = module.mimir_coordinator.app_name,
-      mimir_read          = module.mimir_read.app_name,
-      mimir_write         = module.mimir_write.app_name,
-      mimir_backend       = module.mimir_backend.app_name,
+      mimir_read          = var.monolithic ? null : module.mimir_read[0].app_name,
+      mimir_write         = var.monolithic ? null : module.mimir_write[0].app_name,
+      mimir_backend       = var.monolithic ? null : module.mimir_backend[0].app_name,
+      mimir_all           = var.monolithic ? module.mimir_all[0].app_name : null,
     }
   )
   description = "All application names which make up this product module"
