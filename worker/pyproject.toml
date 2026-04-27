@@ -1,10 +1,10 @@
 [project]
 name = "mimir-worker-k8s"
 version = "0.0"
-requires-python = "~=3.10"  # https://packages.ubuntu.com/jammy/python3
+requires-python = "~=3.12.0"
 
 dependencies = [
-  "coordinated-workers",
+  "coordinated-workers>=3.0.0,<4",
   "charmed-service-mesh-helpers>=0.2.0",
   "lightkube-extensions",
 ]
@@ -41,7 +41,7 @@ asyncio_mode = "auto"
 minversion = "6.0"
 log_cli_level = "INFO"
 markers = [
-  'setup: marks tests as setup (deselect with -m "not setup")'
+  'setup: marks tests as setup (deselect with -m "not setup")',
 ]
 addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
 
