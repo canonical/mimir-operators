@@ -24,7 +24,6 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.abort_on_fail
 def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     """Build the charm-under-test and deploy it together with related charms."""
     juju.deploy(mimir_charm, "mimir", resources=charm_resources(), trust=True, config={"max_global_exemplars_per_user": 100000})
@@ -55,7 +54,6 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     """Deploy the Mimir workers."""
     juju.deploy(
@@ -85,7 +83,6 @@ def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     )
 
 
-@pytest.mark.abort_on_fail
 def test_integrate(juju: jubilant.Juju):
     juju.integrate("mimir:mimir-cluster", "worker-read")
     juju.integrate("mimir:mimir-cluster", "worker-write")

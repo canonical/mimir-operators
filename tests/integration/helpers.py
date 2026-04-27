@@ -228,7 +228,7 @@ def _query_exemplars(
     mimir_url = get_leader_address(juju, coordinator_app)
     response = requests.get(
         f"http://{mimir_url}:8080/prometheus/api/v1/query_exemplars",
-        params={"query": f"{query_name}_total"},
+        params={"query": query_name},
     )
     assert response.status_code == 200, (
         f"query_exemplars got HTTP {response.status_code}: {response.text[:200]}"

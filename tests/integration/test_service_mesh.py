@@ -24,7 +24,6 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.abort_on_fail
 def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel, mesh_channel):
     """Build the charm-under-test and deploy it together with related charms."""
     juju.deploy(mimir_charm, "mimir", resources=charm_resources(), trust=True)
@@ -60,7 +59,6 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel, me
     juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     """Deploy the Mimir workers."""
     if worker_charm := os.environ.get("WORKER_CHARM_PATH"):
@@ -83,7 +81,6 @@ def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     juju.wait(lambda s: jubilant.all_blocked(s, "worker"), timeout=1000)
 
 
-@pytest.mark.abort_on_fail
 def test_integrate(juju: jubilant.Juju):
     juju.integrate("mimir:mimir-cluster", "worker")
     juju.integrate("mimir:self-metrics-endpoint", "prometheus")
@@ -104,7 +101,6 @@ def test_integrate(juju: jubilant.Juju):
     )
 
 
-@pytest.mark.abort_on_fail
 def test_enable_service_mesh(juju: jubilant.Juju):
     """Enable service mesh."""
     service_mesh(
