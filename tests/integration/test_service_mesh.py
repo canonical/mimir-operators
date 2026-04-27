@@ -24,13 +24,12 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.abort_on_fail
 def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel, mesh_channel):
     """Build the charm-under-test and deploy it together with related charms."""
     juju.deploy(mimir_charm, "mimir", resources=charm_resources(), trust=True)
     juju.deploy("prometheus-k8s", "prometheus", channel=cos_channel, trust=True)
     juju.deploy("grafana-k8s", "grafana", channel=cos_channel, trust=True)
-    juju.deploy("grafana-agent-k8s", "agent", channel=cos_channel)
+    juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
     juju.deploy("istio-k8s", "istio", channel=mesh_channel, trust=True)
     juju.deploy("istio-beacon-k8s", "istio-beacon", channel=mesh_channel, trust=True)
     juju.deploy("istio-ingress-k8s", "istio-ingress", channel=mesh_channel, trust=True)
@@ -51,14 +50,15 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel, me
     juju.wait(
         lambda s: jubilant.all_active(
             s, "prometheus", "grafana", "minio", "s3",
-            "istio", "istio-beacon", "istio-ingress",
+            "istio", "istio-beacon", "istio-ingress", "otelcol",
         ),
         timeout=1000,
     )
-    juju.wait(lambda s: jubilant.all_blocked(s, "mimir", "agent"), timeout=1000)
+
+    juju.integrate("mimir:s3", "s3")
+    juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     """Deploy the Mimir workers."""
     if worker_charm := os.environ.get("WORKER_CHARM_PATH"):
@@ -81,20 +81,18 @@ def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     juju.wait(lambda s: jubilant.all_blocked(s, "worker"), timeout=1000)
 
 
-@pytest.mark.abort_on_fail
 def test_integrate(juju: jubilant.Juju):
-    juju.integrate("mimir:s3", "s3")
     juju.integrate("mimir:mimir-cluster", "worker")
     juju.integrate("mimir:self-metrics-endpoint", "prometheus")
     juju.integrate("mimir:grafana-dashboards-provider", "grafana")
     juju.integrate("mimir:grafana-source", "grafana")
     juju.integrate("mimir:ingress", "istio-ingress:ingress")
-    juju.integrate("mimir:receive-remote-write", "agent")
-    juju.integrate("agent:metrics-endpoint", "grafana")
+    juju.integrate("mimir:receive-remote-write", "otelcol:send-remote-write")
+    juju.integrate("otelcol:metrics-endpoint", "grafana:metrics-endpoint")
 
     juju.wait(
         lambda s: jubilant.all_active(
-            s, "mimir", "prometheus", "grafana", "agent",
+            s, "mimir", "prometheus", "grafana", "otelcol",
             "minio", "s3", "worker", "istio-ingress",
         ),
         timeout=1000,
@@ -103,7 +101,6 @@ def test_integrate(juju: jubilant.Juju):
     )
 
 
-@pytest.mark.abort_on_fail
 def test_enable_service_mesh(juju: jubilant.Juju):
     """Enable service mesh."""
     service_mesh(
@@ -146,7 +143,7 @@ def test_metrics_endpoint(juju: jubilant.Juju):
 
 @retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_metrics_in_mimir(juju: jubilant.Juju):
-    """Check that the agent metrics appear in Mimir when mesh is enabled."""
+    """Check that otelcol-scraped metrics appear in Mimir when mesh is enabled."""
     source_pod = "worker/0"
-    result = query_mimir_from_client_pod(juju, source_pod, query='up{juju_charm=~"grafana-agent-k8s"}')
+    result = query_mimir_from_client_pod(juju, source_pod, query='up{juju_charm=~"grafana-k8s"}')
     assert result

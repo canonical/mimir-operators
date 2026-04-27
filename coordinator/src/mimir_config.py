@@ -82,23 +82,10 @@ MINIMAL_DEPLOYMENT = {
 deployment to be considered consistent (otherwise we set blocked). On top of what mimir itself lists as required,
 we add alertmanager."""
 
-RECOMMENDED_DEPLOYMENT = {
-    MimirRole.compactor.value: 1,
-    MimirRole.distributor.value: 1,
-    MimirRole.ingester.value: 3,
-    MimirRole.querier.value: 2,
-    MimirRole.query_frontend.value: 1,
-    MimirRole.store_gateway.value: 1,
-    MimirRole.ruler: 1,
-}
-"""The set of roles that need to be allocated for the
-deployment to be considered robust according to the official recommendations/guidelines."""
-
 MIMIR_ROLES_CONFIG = ClusterRolesConfig(
     roles=set(MimirRole),
     meta_roles=META_ROLES,
     minimal_deployment=MINIMAL_DEPLOYMENT,
-    recommended_deployment=RECOMMENDED_DEPLOYMENT,
 )
 """Define the configuration for Mimir roles."""
 
@@ -233,25 +220,27 @@ class MimirConfig:
 
     # scheduler_address:
     # Address of the query-scheduler component, in host:port format.
+    # The host should resolve to all query-scheduler instances (single address, not a list).
     # When set, the query-frontend registers with the scheduler and
     # queriers pull queries from it instead of connecting directly.
     def _build_frontend_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
         scheduler_addrs = self._get_grpc_addresses(cluster, "query-scheduler")
         if scheduler_addrs:
-            return {"scheduler_address": ",".join(scheduler_addrs)}
+            return {"scheduler_address": scheduler_addrs[0]}
         return {}
 
     # frontend_address / scheduler_address:
     # Configures queriers to connect to query-frontends (or query-schedulers).
     # Prefers query-scheduler when available.
+    # Both fields expect a single host:port address.
     def _build_frontend_worker_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
         scheduler_addrs = self._get_grpc_addresses(cluster, "query-scheduler")
         if scheduler_addrs:
-            return {"scheduler_address": ",".join(scheduler_addrs)}
+            return {"scheduler_address": scheduler_addrs[0]}
 
         frontend_addrs = self._get_grpc_addresses(cluster, "query-frontend")
         if frontend_addrs:
-            return {"frontend_address": ",".join(frontend_addrs)}
+            return {"frontend_address": frontend_addrs[0]}
 
         return {}
 
