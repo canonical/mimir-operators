@@ -116,10 +116,10 @@ def test_build_compactor_config(mimir_config):
             {"query-scheduler": ["http://scheduler.host:8080"]},
             {"scheduler_address": "scheduler.host:9095"},
         ),
-        # Multiple schedulers: comma-separated
+        # Multiple schedulers: only first address used (Mimir expects single host:port)
         (
             {"query-scheduler": ["http://sched.0:8080", "http://sched.1:8080"]},
-            {"scheduler_address": "sched.0:9095,sched.1:9095"},
+            {"scheduler_address": "sched.0:9095"},
         ),
         # No scheduler: empty config
         ({}, {}),
@@ -161,10 +161,10 @@ def test_build_frontend_config(mimir_config, coordinator, addresses_by_role, exp
         ),
         # Neither: empty config
         ({}, {}),
-        # Multiple frontends (no scheduler): comma-separated
+        # Multiple frontends (no scheduler): only first address used (Mimir expects single host:port)
         (
             {"query-frontend": ["http://fe.0:8080", "http://fe.1:8080"]},
-            {"frontend_address": "fe.0:9095,fe.1:9095"},
+            {"frontend_address": "fe.0:9095"},
         ),
         # Plain hostnames (no scheme/port) as returned by real deployments
         (
