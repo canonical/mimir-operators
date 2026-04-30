@@ -13,9 +13,13 @@ import pytest
 logger = logging.getLogger(__name__)
 
 
+def pytest_addoption(parser):
+    parser.addoption("--keep-models", action="store_true", default=False, help="Keep Juju models after tests")
+
+
 @pytest.fixture(scope="module")
 def juju(request: pytest.FixtureRequest):
-    keep = request.config.getoption("--keep-models", default=False)
+    keep = request.config.getoption("--keep-models")
     with jubilant.temp_model(keep=keep) as juju:
         juju.wait_timeout = 30 * 60
         yield juju
@@ -40,7 +44,13 @@ def mimir_charm():
     if charm_file := os.environ.get("CHARM_PATH"):
         return charm_file
 
-    subprocess.run(["charmcraft", "pack"], check=True)
-    charm_files = sorted(Path(".").glob("*.charm"))
+    coordinator_dir = Path(__file__).resolve().parents[2] / "coordinator"
+    result = subprocess.run(
+        ["charmcraft", "pack"], cwd=coordinator_dir, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        logger.error("charmcraft pack failed (cwd=%s):\n%s\n%s", coordinator_dir, result.stdout, result.stderr)
+        result.check_returncode()
+    charm_files = sorted(coordinator_dir.glob("*.charm"))
     assert charm_files, "No .charm file found after charmcraft pack"
     return str(charm_files[-1].resolve())

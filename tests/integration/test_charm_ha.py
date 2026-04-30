@@ -17,8 +17,7 @@ from helpers import (
     get_mimir_rules_from_grafana,
     get_prometheus_targets_from_client_localhost,
     get_traefik_proxied_endpoints,
-    push_to_otelcol,
-    query_exemplars,
+    push_and_verify_exemplars,
     query_mimir_from_client_localhost,
 )
 from tenacity import retry, stop_after_attempt, wait_fixed
@@ -26,14 +25,12 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.abort_on_fail
 def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     """Build the charm-under-test and deploy it together with related charms."""
     juju.deploy(mimir_charm, "mimir", resources=charm_resources(), trust=True, config={"max_global_exemplars_per_user": 100000})
     juju.deploy("prometheus-k8s", "prometheus", channel=cos_channel, trust=True)
     juju.deploy("loki-k8s", "loki", channel=cos_channel, trust=True)
     juju.deploy("grafana-k8s", "grafana", channel=cos_channel, trust=True)
-    juju.deploy("grafana-agent-k8s", "agent", channel=cos_channel)
     juju.deploy("traefik-k8s", "traefik", channel="latest/edge", trust=True)
     juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
     # Secret must be at least 8 characters: https://github.com/canonical/minio-operator/issues/137
@@ -53,10 +50,11 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
         lambda s: jubilant.all_active(s, "prometheus", "loki", "grafana", "minio", "s3", "otelcol"),
         timeout=1000,
     )
-    juju.wait(lambda s: jubilant.all_blocked(s, "mimir", "agent"), timeout=1000)
+
+    juju.integrate("mimir:s3", "s3")
+    juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     """Deploy the Mimir workers."""
     juju.deploy(
@@ -86,9 +84,7 @@ def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     )
 
 
-@pytest.mark.abort_on_fail
 def test_integrate(juju: jubilant.Juju):
-    juju.integrate("mimir:s3", "s3")
     juju.integrate("mimir:mimir-cluster", "worker-read")
     juju.integrate("mimir:mimir-cluster", "worker-write")
     juju.integrate("mimir:mimir-cluster", "worker-backend")
@@ -97,13 +93,12 @@ def test_integrate(juju: jubilant.Juju):
     juju.integrate("mimir:grafana-source", "grafana")
     juju.integrate("mimir:logging-consumer", "loki")
     juju.integrate("mimir:ingress", "traefik")
-    juju.integrate("mimir:receive-remote-write", "agent")
-    juju.integrate("agent:metrics-endpoint", "grafana")
     juju.integrate("mimir:receive-remote-write", "otelcol:send-remote-write")
+    juju.integrate("otelcol:metrics-endpoint", "grafana:metrics-endpoint")
 
     juju.wait(
         lambda s: jubilant.all_active(
-            s, "mimir", "prometheus", "loki", "grafana", "agent",
+            s, "mimir", "prometheus", "loki", "grafana", "otelcol",
             "minio", "s3", "worker-read", "worker-write", "worker-backend", "traefik",
         ),
         timeout=2000,
@@ -142,11 +137,12 @@ def test_metrics_endpoint(juju: jubilant.Juju):
 
 @retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_metrics_in_mimir(juju: jubilant.Juju):
-    """Check that the agent metrics appear in Mimir."""
-    result = query_mimir_from_client_localhost(juju, query='up{juju_charm=~"grafana-agent-k8s"}')
+    """Check that otelcol-scraped metrics appear in Mimir."""
+    result = query_mimir_from_client_localhost(juju, query='up{juju_charm=~"grafana-k8s"}')
     assert result
 
 
+@retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
 def test_traefik(juju: jubilant.Juju):
     """Check the ingress integration, by checking if Mimir is reachable through Traefik."""
     proxied_endpoints = get_traefik_proxied_endpoints(juju)
@@ -158,8 +154,4 @@ def test_traefik(juju: jubilant.Juju):
 
 def test_exemplars(juju: jubilant.Juju):
     """Check that Mimir successfully receives and stores exemplars."""
-    metric_name = "sample_metric"
-    trace_id = push_to_otelcol(juju, metric_name=metric_name)
-
-    found_trace_id = query_exemplars(juju, query_name=metric_name, coordinator_app="mimir")
-    assert found_trace_id == trace_id
+    push_and_verify_exemplars(juju, coordinator_app="mimir")

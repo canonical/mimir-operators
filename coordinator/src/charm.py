@@ -434,6 +434,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self._update_prometheus_api()
         self._update_datasource_exchange()
         self.grafana_source.update_source(source_url=f"{self.most_external_url}/prometheus")
+        self.remote_write_provider.update_endpoint()
 
         # Open necessary service ports. needed for telemetry proxying.
         nginx_port = NGINX_TLS_PORT if self.coordinator.tls_available else NGINX_PORT

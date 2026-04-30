@@ -32,7 +32,6 @@ ROLES = [
 WORKER_APPS = [f"worker-{role}" for role in ROLES]
 
 
-@pytest.mark.abort_on_fail
 def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     """Build the charm-under-test and deploy it together with related charms."""
     juju.deploy(mimir_charm, "mimir", resources=charm_resources(), trust=True)
@@ -50,10 +49,11 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     configure_s3_integrator(juju)
 
     juju.wait(lambda s: jubilant.all_active(s, "minio", "s3"), timeout=1000)
+
+    juju.integrate("mimir:s3", "s3")
     juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
-@pytest.mark.abort_on_fail
 def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     """Deploy one Mimir worker per individual role."""
     for role in ROLES:
@@ -67,10 +67,8 @@ def test_deploy_workers(juju: jubilant.Juju, cos_channel):
     juju.wait(lambda s: jubilant.all_blocked(s, *WORKER_APPS), timeout=1000)
 
 
-@pytest.mark.abort_on_fail
 def test_integrate(juju: jubilant.Juju):
     """Integrate all workers with the coordinator and wait for active/idle."""
-    juju.integrate("mimir:s3", "s3")
     for app in WORKER_APPS:
         juju.integrate("mimir:mimir-cluster", app)
 
