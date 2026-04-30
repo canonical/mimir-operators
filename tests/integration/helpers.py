@@ -89,6 +89,42 @@ def get_grafana_datasources_from_client_localhost(
     return response.json()
 
 
+def get_mimir_rules_from_grafana(
+    juju: jubilant.Juju,
+    grafana_app: str = "grafana",
+) -> dict[str, Any]:
+    """Query Mimir alert rules through Grafana's Prometheus-compatible API.
+
+    This exercises the nginx routing in the Mimir coordinator for the
+    /prometheus/api/v1/rules endpoint, which Grafana uses to fetch alert rules.
+    """
+    task = juju.run(f"{grafana_app}/leader", "get-admin-password")
+    admin_password = task.results["admin-password"]
+    grafana_url = get_leader_address(juju, grafana_app)
+    base_url = f"http://admin:{admin_password}@{grafana_url}:3000"
+
+    # Find the Mimir datasource UID (type "prometheus", name contains "mimir")
+    response = requests.get(f"{base_url}/api/datasources")
+    assert response.status_code == 200
+    datasources = response.json()
+
+    mimir_uid = None
+    for ds in datasources:
+        if "mimir" in ds.get("name", "").lower() and ds.get("type") == "prometheus":
+            mimir_uid = ds.get("uid")
+            break
+    assert mimir_uid is not None, "Mimir datasource not found in Grafana"
+
+    # Query alert rules through Grafana's Prometheus-compatible proxy endpoint
+    response = requests.get(f"{base_url}/api/prometheus/{mimir_uid}/api/v1/rules")
+    assert response.status_code == 200
+    response_json = response.json()
+
+    # Grafana returns 200 with empty groups when there are no rules, so check groups are non-empty
+    assert response_json.get("data", {}).get("groups", []), "No alert rule groups found in Mimir"
+    return response_json
+
+
 def get_grafana_datasources_from_client_pod(
     juju: jubilant.Juju,
     source_pod: str,

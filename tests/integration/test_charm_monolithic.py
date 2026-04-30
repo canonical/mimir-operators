@@ -14,6 +14,7 @@ from helpers import (
     configure_minio,
     configure_s3_integrator,
     get_grafana_datasources_from_client_localhost,
+    get_mimir_rules_from_grafana,
     get_prometheus_targets_from_client_localhost,
     get_traefik_proxied_endpoints,
     push_to_otelcol,
@@ -95,6 +96,17 @@ def test_grafana_source(juju: jubilant.Juju):
     """Test the grafana-source integration, by checking that Mimir appears in the Datasources."""
     datasources = get_grafana_datasources_from_client_localhost(juju)
     assert "mimir" in datasources[0]["name"]
+
+
+@retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
+def test_mimir_rules_from_grafana(juju: jubilant.Juju):
+    """Test that Mimir alert rules can be queried through Grafana's Prometheus API.
+
+    This validates the nginx routing in the Mimir coordinator correctly handles
+    the /prometheus/api/v1/rules endpoint that Grafana uses to fetch alert rules.
+    """
+    result = get_mimir_rules_from_grafana(juju)
+    assert result["status"] == "success"
 
 
 @retry(wait=wait_fixed(10), stop=stop_after_attempt(6))
