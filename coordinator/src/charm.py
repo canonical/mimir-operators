@@ -359,7 +359,6 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             # Update the alert rules files on disk
             self._nginx_container.remove_path(RULES_DIR, recursive=True)
             rules_file_paths: List[str] = self._push_alert_rules(remote_write_alerts)
-            self._push(ALERTS_HASH_PATH, alerts_hash)
             # Push the alert rules to the Mimir cluster (persisted in s3)
             mimirtool_output = self._nginx_container.pebble.exec(
                 [
@@ -372,10 +371,15 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 ],
                 encoding="utf-8",
             )
-            if mimirtool_output.stdout:
-                logger.info(f"mimirtool: {mimirtool_output.stdout.read().strip()}")
-            if mimirtool_output.stderr:
-                logger.error(f"mimirtool (err): {mimirtool_output.stderr.read().strip()}")
+            stdout = mimirtool_output.stdout.read().strip() if mimirtool_output.stdout else ""
+            stderr = mimirtool_output.stderr.read().strip() if mimirtool_output.stderr else ""
+            if stdout:
+                logger.info(f"mimirtool: {stdout}")
+            if stderr:
+                logger.error(f"mimirtool (err): {stderr}")
+                return
+            # Only persist the hash once mimirtool has successfully synced the rules
+            self._push(ALERTS_HASH_PATH, alerts_hash)
 
     def _update_prometheus_api(self) -> None:
         """Update all applications related to us via the prometheus-api relation."""
