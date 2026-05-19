@@ -18,6 +18,7 @@ output "provides" {
     mimir_cluster               = module.mimir_coordinator.provides.mimir_cluster,
     receive_remote_write        = "receive-remote-write",
     self_metrics_endpoint       = "self-metrics-endpoint",
+    provide_cmr_mesh            = module.mimir_coordinator.provides.provide_cmr_mesh,
     send_datasource             = "send-datasource",
   }
   description = "All Juju integration endpoints where the charm is the provider"
@@ -32,6 +33,8 @@ output "requires" {
     s3               = "s3",
     charm_tracing    = "charm-tracing",
     catalogue        = "catalogue",
+    require_cmr_mesh = module.mimir_coordinator.requires.require_cmr_mesh,
+    service_mesh     = module.mimir_coordinator.requires.service_mesh,
   }
   description = "All Juju integration endpoints where the charm is the requirer"
 }
