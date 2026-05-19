@@ -40,6 +40,7 @@ This is a Terraform module facilitating the deployment of Mimir solution, using 
 | <a name="input_channel"></a> [channel](#input\_channel) | Channel that the applications are deployed from | `string` | n/a | yes |
 | <a name="input_coordinator_config"></a> [coordinator\_config](#input\_coordinator\_config) | Map of the coordinator configuration options | `map(string)` | `{}` | no |
 | <a name="input_coordinator_constraints"></a> [coordinator\_constraints](#input\_coordinator\_constraints) | String listing constraints for the coordinator application | `string` | `"arch=amd64"` | no |
+| <a name="input_coordinator_resources"></a> [coordinator\_resources](#input\_coordinator\_resources) | The coordinator application's resources i.e., a resource revision number from CharmHub or a custom OCI image resource | `map(string)` | `{}` | no |
 | <a name="input_coordinator_revision"></a> [coordinator\_revision](#input\_coordinator\_revision) | Revision number of the coordinator application | `number` | `null` | no |
 | <a name="input_coordinator_storage_directives"></a> [coordinator\_storage\_directives](#input\_coordinator\_storage\_directives) | Map of storage used by the coordinator application, which defaults to 1 GB, allocated by Juju | `map(string)` | `{}` | no |
 | <a name="input_coordinator_units"></a> [coordinator\_units](#input\_coordinator\_units) | Number of Mimir coordinator units | `number` | `1` | no |
@@ -60,6 +61,7 @@ This is a Terraform module facilitating the deployment of Mimir solution, using 
 | <a name="input_s3_integrator_units"></a> [s3\_integrator\_units](#input\_s3\_integrator\_units) | Number of S3 integrator units | `number` | `1` | no |
 | <a name="input_s3_secret_key"></a> [s3\_secret\_key](#input\_s3\_secret\_key) | S3 secret-key credential | `string` | n/a | yes |
 | <a name="input_worker_constraints"></a> [worker\_constraints](#input\_worker\_constraints) | String listing constraints for the worker application | `string` | `"arch=amd64"` | no |
+| <a name="input_worker_resources"></a> [worker\_resources](#input\_worker\_resources) | The worker application's resources i.e., a resource revision number from CharmHub or a custom OCI image resource | `map(string)` | `{}` | no |
 | <a name="input_worker_revision"></a> [worker\_revision](#input\_worker\_revision) | Revision number of the worker application | `number` | `null` | no |
 | <a name="input_write_config"></a> [write\_config](#input\_write\_config) | Map of the write worker configuration options | `map(string)` | `{}` | no |
 | <a name="input_write_name"></a> [write\_name](#input\_write\_name) | Name of the Mimir write (meta role) app | `string` | `"mimir-write"` | no |
