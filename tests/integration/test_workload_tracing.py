@@ -4,11 +4,9 @@
 
 # pyright: reportAttributeAccessIssue=false
 
-import datetime
 import logging
 
 import jubilant
-import pytest
 from helpers import (
     configure_minio,
     configure_s3_integrator,
