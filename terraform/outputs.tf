@@ -3,10 +3,8 @@ output "app_names" {
     {
       mimir_s3_integrator = juju_application.s3_integrator.name,
       mimir_coordinator   = module.mimir_coordinator.app_name,
-      mimir_read          = module.mimir_read.app_name,
-      mimir_write         = module.mimir_write.app_name,
-      mimir_backend       = module.mimir_backend.app_name,
-    }
+    },
+    { for k, v in module.mimir_worker : "mimir_${k}" => v.app_name }
   )
   description = "All application names which make up this product module"
 }

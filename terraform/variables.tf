@@ -49,24 +49,37 @@ variable "s3_endpoint" {
   type        = string
 }
 
-# -------------- # App Names --------------
+# -------------- # Workers --------------
 
-variable "read_name" {
-  description = "Name of the Mimir read (meta role) app"
-  type        = string
-  default     = "mimir-read"
-}
+variable "workers" {
+  description = "Map of worker roles to deploy. Keys must be one of: all, backend, read, write. When 'all' is used, a single worker with role-all is created."
+  type = map(object({
+    units              = optional(number, 1)
+    config             = optional(map(string), {})
+    constraints        = optional(string, "arch=amd64")
+    storage_directives = optional(map(string), {})
+    app_name           = optional(string)
+  }))
+  default = {
+    backend = {}
+    read    = {}
+    write   = {}
+  }
 
-variable "write_name" {
-  description = "Name of the Mimir write (meta role) app"
-  type        = string
-  default     = "mimir-write"
-}
+  validation {
+    condition     = alltrue([for k in keys(var.workers) : contains(["all", "backend", "read", "write"], k)])
+    error_message = "Worker keys must be one of: all, backend, read, write."
+  }
 
-variable "backend_name" {
-  description = "Name of the Mimir backend (meta role) app"
-  type        = string
-  default     = "mimir-backend"
+  validation {
+    condition     = !(contains(keys(var.workers), "all") && length(var.workers) > 1)
+    error_message = "When using role 'all', no other worker roles may be specified."
+  }
+
+  validation {
+    condition     = alltrue([for k, v in var.workers : v.units >= 1])
+    error_message = "The number of units for each worker must be greater than or equal to 1."
+  }
 }
 
 variable "s3_integrator_name" {
@@ -79,24 +92,6 @@ variable "s3_integrator_name" {
 
 variable "coordinator_config" {
   description = "Map of the coordinator configuration options"
-  type        = map(string)
-  default     = {}
-}
-
-variable "backend_config" {
-  description = "Map of the backend worker configuration options"
-  type        = map(string)
-  default     = {}
-}
-
-variable "read_config" {
-  description = "Map of the read worker configuration options"
-  type        = map(string)
-  default     = {}
-}
-
-variable "write_config" {
-  description = "Map of the write worker configuration options"
   type        = map(string)
   default     = {}
 }
@@ -123,17 +118,6 @@ variable "coordinator_constraints" {
 
   validation {
     condition     = !(var.anti_affinity && var.coordinator_constraints != "arch=amd64")
-    error_message = "Setting both custom charm constraints and anti-affinity to true is not allowed."
-  }
-}
-
-variable "worker_constraints" {
-  description = "String listing constraints for the worker application"
-  type        = string
-  default     = "arch=amd64"
-
-  validation {
-    condition     = !(var.anti_affinity && var.worker_constraints != "arch=amd64")
     error_message = "Setting both custom charm constraints and anti-affinity to true is not allowed."
   }
 }
@@ -191,24 +175,6 @@ variable "coordinator_storage_directives" {
   default     = {}
 }
 
-variable "backend_worker_storage_directives" {
-  description = "Map of storage used by the backend worker application, which defaults to 1 GB, allocated by Juju"
-  type        = map(string)
-  default     = {}
-}
-
-variable "read_worker_storage_directives" {
-  description = "Map of storage used by the read worker application, which defaults to 1 GB, allocated by Juju"
-  type        = map(string)
-  default     = {}
-}
-
-variable "write_worker_storage_directives" {
-  description = "Map of storage used by the write worker application, which defaults to 1 GB, allocated by Juju"
-  type        = map(string)
-  default     = {}
-}
-
 variable "s3_integrator_storage_directives" {
   description = "Map of storage used by the s3-integrator application, which defaults to 1 GB, allocated by Juju"
   type        = map(string)
@@ -216,36 +182,6 @@ variable "s3_integrator_storage_directives" {
 }
 
 # -------------- # Units Per App --------------
-
-variable "read_units" {
-  description = "Number of Mimir worker units with the read meta role"
-  type        = number
-  default     = 1
-  validation {
-    condition     = var.read_units >= 1
-    error_message = "The number of units must be greater than or equal to 1."
-  }
-}
-
-variable "write_units" {
-  description = "Number of Mimir worker units with the write meta role"
-  type        = number
-  default     = 1
-  validation {
-    condition     = var.write_units >= 1
-    error_message = "The number of units must be greater than or equal to 1."
-  }
-}
-
-variable "backend_units" {
-  description = "Number of Mimir worker units with the backend meta role"
-  type        = number
-  default     = 1
-  validation {
-    condition     = var.backend_units >= 1
-    error_message = "The number of units must be greater than or equal to 1."
-  }
-}
 
 variable "coordinator_units" {
   description = "Number of Mimir coordinator units"
