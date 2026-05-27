@@ -10,8 +10,6 @@ import logging
 import jubilant
 import pytest
 from helpers import (
-    ACCESS_KEY,
-    SECRET_KEY,
     configure_minio,
     configure_s3_integrator,
     deploy_tempo_cluster,
@@ -44,7 +42,7 @@ def test_build_and_deploy(juju: Juju, coordinator_charm, cos_channel):
     juju.deploy(
         "minio",
         channel="ckf-1.9/stable",
-        config={"access-key": ACCESS_KEY, "secret-key": SECRET_KEY},
+        config={"access-key": "access", "secret-key": "secretsecret"},
     )
     juju.deploy("s3-integrator", app="s3", channel="latest/stable")
 
