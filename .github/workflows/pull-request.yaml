@@ -3,6 +3,13 @@ name: Pull Requests
 on:
   pull_request:
 
+permissions:
+  # Required for CodeQL security scanning
+  security-events: write
+  # Required for private repositories
+  actions: read
+  contents: read
+
 jobs:
   pull-request:
     strategy:
