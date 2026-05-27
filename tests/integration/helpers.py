@@ -354,3 +354,27 @@ def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tls=True
     traces = get_traces(tempo_host, service_name=service_name, tls=tls)
     assert len(traces) > 0
     return traces
+
+def deploy_tempo_cluster(juju: Juju, cos_channel: str):
+    """Deploy Tempo in its HA version together with Minio and s3-integrator."""
+    tempo_app = "tempo"
+    worker_app = "tempo-worker"
+    s3_app = "s3-tempo"
+
+    juju.deploy("tempo-worker-k8s", app=worker_app, channel=cos_channel, trust=True)
+    juju.deploy("tempo-coordinator-k8s", app=tempo_app, channel=cos_channel, trust=True)
+    juju.deploy("s3-integrator", app=s3_app, channel="edge")
+
+    juju.integrate(f"{tempo_app}:s3", f"{s3_app}:s3-credentials")
+    juju.integrate(f"{tempo_app}:tempo-cluster", f"{worker_app}:tempo-cluster")
+
+    configure_minio(juju, bucket_name="tempo")
+    juju.wait(lambda status: jubilant.all_blocked(status, s3_app), timeout=1000)
+    configure_s3_integrator(juju, bucket_name="tempo", s3_app=s3_app)
+
+    juju.wait(
+        lambda status: jubilant.all_active(status, tempo_app, worker_app, s3_app),
+        timeout=2000,
+        delay=5,
+        successes=3,
+    )
