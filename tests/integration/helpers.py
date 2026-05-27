@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-import jubilant
+import jubilant 
 import requests
 import yaml
 from lightkube import Client
@@ -355,7 +355,7 @@ def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tls=True
     assert len(traces) > 0
     return traces
 
-def deploy_tempo_cluster(juju: Juju, cos_channel: str):
+def deploy_tempo_cluster(juju: jubilant.Juju, cos_channel: str):
     """Deploy Tempo in its HA version together with Minio and s3-integrator."""
     tempo_app = "tempo"
     worker_app = "tempo-worker"
