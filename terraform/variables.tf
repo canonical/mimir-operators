@@ -34,19 +34,30 @@ variable "s3_bucket" {
 }
 
 variable "s3_access_key" {
-  description = "S3 access-key credential"
+  description = "S3 access-key credential. Set to null (along with s3_endpoint and s3_secret_key) to skip deploying the S3 integrator."
   type        = string
+  default     = null
 }
 
 variable "s3_secret_key" {
-  description = "S3 secret-key credential"
+  description = "S3 secret-key credential. Set to null (along with s3_endpoint and s3_access_key) to skip deploying the S3 integrator."
   type        = string
   sensitive   = true
+  default     = null
 }
 
 variable "s3_endpoint" {
-  description = "S3 endpoint"
+  description = "S3 endpoint. When null, the S3 integrator is not deployed and the caller must handle storage integration externally."
   type        = string
+  default     = null
+
+  validation {
+    condition = (
+      (var.s3_endpoint == null && var.s3_access_key == null && var.s3_secret_key == null) ||
+      (var.s3_endpoint != null && var.s3_access_key != null && var.s3_secret_key != null)
+    )
+    error_message = "s3_endpoint, s3_access_key, and s3_secret_key must all be set or all be null."
+  }
 }
 
 # -------------- # Workers --------------

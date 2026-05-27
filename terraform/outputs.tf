@@ -1,9 +1,9 @@
 output "app_names" {
   value = merge(
     {
-      mimir_s3_integrator = juju_application.s3_integrator.name,
-      mimir_coordinator   = module.mimir_coordinator.app_name,
+      mimir_coordinator = module.mimir_coordinator.app_name,
     },
+    local.deploy_s3 ? { mimir_s3_integrator = juju_application.s3_integrator[0].name } : {},
     { for k, v in module.mimir_worker : "mimir_${k}" => v.app_name }
   )
   description = "All application names which make up this product module"
