@@ -26,7 +26,6 @@ TEMPO_WORKER_APP_NAME = "tempo-worker"
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.setup
 def test_build_and_deploy(juju: Juju, coordinator_charm, cos_channel):
     """Build the charm-under-test and deploy it together with related charms."""
     charm, channel, resources = coordinator_charm
