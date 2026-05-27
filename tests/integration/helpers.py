@@ -355,6 +355,11 @@ def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tls=True
     assert len(traces) > 0
     return traces
 
+def get_application_ip(juju: jubilant.Juju, app_name: str) -> str:
+    """Get the application IP address."""
+    status = juju.status()
+    return status.apps[app_name].address
+
 def deploy_tempo_cluster(juju: jubilant.Juju, cos_channel: str):
     """Deploy Tempo in its HA version together with Minio and s3-integrator."""
     tempo_app = "tempo"
@@ -378,3 +383,4 @@ def deploy_tempo_cluster(juju: jubilant.Juju, cos_channel: str):
         delay=5,
         successes=3,
     )
+
