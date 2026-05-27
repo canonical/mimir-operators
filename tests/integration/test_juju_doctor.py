@@ -4,7 +4,6 @@ from helpers import charm_resources, configure_minio, configure_s3_integrator
 from jubilant import Juju, all_active, all_blocked
 
 
-@pytest.mark.setup
 def test_deploy_workers(juju: Juju, cos_channel):
     # GIVEN an empty model
 
