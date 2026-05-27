@@ -17,7 +17,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import format_trace_id
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_fixed, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -330,3 +330,27 @@ def service_mesh(
                 f"{beacon_app_name}:service-mesh", f"{app}:service-mesh"
             )
     juju.wait(jubilant.all_active, timeout=1000, successes=10, delay=3)
+
+
+def get_traces(tempo_host: str, service_name="tracegen-otlp_http", tls=True):
+    """Get traces directly from Tempo REST API."""
+    url = f"{'https' if tls else 'http'}://{tempo_host}:3200/api/search?tags=service.name={service_name}"
+    req = requests.get(
+        url,
+        verify=False,
+    )
+    assert req.status_code == 200
+    traces = json.loads(req.text)["traces"]
+    return traces
+
+
+@retry(stop=stop_after_attempt(15), wait=wait_exponential(multiplier=1, min=4, max=10))
+def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tls=True):
+    """Get traces directly from Tempo REST API, but also try multiple times.
+
+    Useful for cases when Tempo might not return the traces immediately (its API is known
+    for returning data in random order).
+    """
+    traces = get_traces(tempo_host, service_name=service_name, tls=tls)
+    assert len(traces) > 0
+    return traces

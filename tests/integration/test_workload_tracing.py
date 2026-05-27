@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+# Copyright 2024 Ubuntu
+# See LICENSE file for licensing details.
+
+# pyright: reportAttributeAccessIssue=false
+
+import datetime
+import logging
+
+import jubilant
+import pytest
+from helpers import (
+    ACCESS_KEY,
+    SECRET_KEY,
+    configure_minio,
+    configure_s3_integrator,
+    deploy_tempo_cluster,
+    get_application_ip,
+    get_traces_patiently,
+)
+from jubilant import Juju
+
+APP_NAME = "mimir"
+APP_WORKER_NAME = "worker"
+TEMPO_APP_NAME = "tempo"
+TEMPO_WORKER_APP_NAME = "tempo-worker"
+
+logger = logging.getLogger(__name__)
+
+
+@pytest.mark.setup
+def test_build_and_deploy(juju: Juju, coordinator_charm, cos_channel):
+    """Build the charm-under-test and deploy it together with related charms."""
+    charm, channel, resources = coordinator_charm
+    # deploy charms of interest
+    juju.deploy(charm, app=APP_NAME, channel=channel, resources=resources, trust=True)
+    juju.deploy(
+        "mimir-worker-k8s",
+        app=APP_WORKER_NAME,
+        channel=cos_channel,
+        config={"role-all": True},
+        trust=True,
+    )
+    juju.deploy(
+        "minio",
+        channel="ckf-1.9/stable",
+        config={"access-key": ACCESS_KEY, "secret-key": SECRET_KEY},
+    )
+    juju.deploy("s3-integrator", app="s3", channel="latest/stable")
+
+    # configure s3 integrator and minio for loki
+    juju.wait(lambda status: jubilant.all_active(status, "minio"), timeout=1000)
+    juju.wait(lambda status: jubilant.all_blocked(status, "s3"), timeout=1000)
+    configure_minio(juju)
+    configure_s3_integrator(juju)
+    juju.integrate(f"{APP_NAME}:s3", "s3")
+    juju.integrate(f"{APP_NAME}:mimir-cluster", APP_WORKER_NAME)
+
+    # deploy Tempo cluster
+    deploy_tempo_cluster(juju, cos_channel)
+
+    # wait until charms settle down
+    juju.wait(
+        lambda status: jubilant.all_agents_idle(status) and jubilant.all_active(
+            status, APP_WORKER_NAME, APP_NAME, "minio", "s3", TEMPO_APP_NAME, TEMPO_WORKER_APP_NAME
+        ),
+        timeout=1000,
+    )
+
+
+
+def test_workload_traces(juju: Juju):
+    # integrate workload-tracing only to not affect search results with charm traces
+    juju.integrate(f"{APP_NAME}:workload-tracing", f"{TEMPO_APP_NAME}:tracing")
+
+    juju.wait(
+        lambda status: jubilant.all_agents_idle(status) and jubilant.all_active(
+            status, APP_NAME, TEMPO_APP_NAME, TEMPO_WORKER_APP_NAME, APP_WORKER_NAME
+        ),
+        timeout=300,
+    )
+
+    # verify workload traces are ingested into Tempo
+    assert get_traces_patiently(
+        get_application_ip(juju, TEMPO_APP_NAME),
+        service_name="mimir",
+        tls=False,
+    )
