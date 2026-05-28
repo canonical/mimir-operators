@@ -18,7 +18,7 @@ jobs:
         charm-path:
           - coordinator
           - worker
-    uses: canonical/observability/.github/workflows/charm-pull-request.yaml@fix/remove-juju-default-qualit-checks
+    uses: canonical/observability/.github/workflows/charm-pull-request.yaml@v2
     secrets: inherit
     with:
       charm-path: ${{ matrix.charm-path }}
