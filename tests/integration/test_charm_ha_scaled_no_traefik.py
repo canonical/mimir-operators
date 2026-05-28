@@ -12,8 +12,7 @@ import jubilant
 import pytest
 from helpers import (
     charm_resources,
-    configure_minio,
-    configure_s3_integrator,
+    deploy_swfs,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,25 +29,14 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
         trust=True,
     )
     juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
-    # Secret must be at least 8 characters: https://github.com/canonical/minio-operator/issues/137
-    juju.deploy(
-        "minio",
-        channel="ckf-1.9/stable",
-        config={"access-key": "access", "secret-key": "secretsecret"},
-    )
-    juju.deploy("s3-integrator", "s3", channel="latest/stable")
-
-    juju.wait(lambda s: jubilant.all_active(s, "minio"), timeout=1000)
-    juju.wait(lambda s: jubilant.all_blocked(s, "s3"), timeout=1000)
-    configure_minio(juju)
-    configure_s3_integrator(juju)
+    deploy_swfs(juju)
 
     juju.wait(
-        lambda s: jubilant.all_active(s, "minio", "s3", "otelcol"),
+        lambda s: jubilant.all_active(s, "swfs", "otelcol"),
         timeout=1000,
     )
 
-    juju.integrate("mimir:s3", "s3")
+    juju.integrate("mimir:s3", "swfs")
     juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
@@ -92,7 +80,7 @@ def test_integrate(juju: jubilant.Juju):
 
     juju.wait(
         lambda s: jubilant.all_active(
-            s, "mimir", "minio", "s3",
+            s, "mimir", "swfs",
             "worker-read", "worker-write", "worker-backend",
         ),
         timeout=2000,

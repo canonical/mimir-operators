@@ -1,6 +1,6 @@
 import pytest
 import sh
-from helpers import charm_resources, configure_minio, configure_s3_integrator
+from helpers import charm_resources, deploy_swfs
 from jubilant import Juju, all_active, all_blocked
 
 
@@ -29,20 +29,11 @@ def test_deploy_workers(juju: Juju, cos_channel):
     )
 
 
-def test_all_active_when_coordinator_and_s3_added(juju: Juju, mimir_charm):
+def test_all_active_when_coordinator_and_swfs_added(juju: Juju, mimir_charm):
     # GIVEN a model with workers
 
     # WHEN deploying and integrating the minimal mimir cluster
-    juju.deploy(
-        "minio",
-        channel="ckf-1.9/stable",
-        config={"access-key": "access", "secret-key": "secretsecret"},
-    )
-    juju.deploy("s3-integrator", "s3", channel="latest/stable")
-    juju.wait(lambda status: all_active(status, "minio"), timeout=1000)
-    juju.wait(lambda status: all_blocked(status, "s3"), timeout=1000)
-    configure_minio(juju)
-    configure_s3_integrator(juju)
+    deploy_swfs(juju)
 
     juju.deploy(
         mimir_charm,
@@ -50,7 +41,7 @@ def test_all_active_when_coordinator_and_s3_added(juju: Juju, mimir_charm):
         resources=charm_resources(),
         trust=True,
     )
-    juju.integrate("mimir:s3", "s3")
+    juju.integrate("mimir:s3", "swfs")
     juju.integrate("mimir:mimir-cluster", "read")
     juju.integrate("mimir:mimir-cluster", "write")
     juju.integrate("mimir:mimir-cluster", "backend")
