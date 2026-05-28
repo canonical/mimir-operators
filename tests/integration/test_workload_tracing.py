@@ -24,9 +24,9 @@ TEMPO_WORKER_APP_NAME = "tempo-worker"
 logger = logging.getLogger(__name__)
 
 
-def test_build_and_deploy(juju: Juju, coordinator_charm, cos_channel):
+def test_build_and_deploy(juju: Juju, mimir_charm, cos_channel):
     """Build the charm-under-test and deploy it together with related charms."""
-    charm, channel, resources = coordinator_charm
+    charm, channel, resources = mimir_charm
     # deploy charms of interest
     juju.deploy(charm, app=APP_NAME, channel=channel, resources=resources, trust=True)
     juju.deploy(
