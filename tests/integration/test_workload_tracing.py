@@ -8,6 +8,7 @@ import logging
 
 import jubilant
 from helpers import (
+    charm_resources,
     configure_minio,
     configure_s3_integrator,
     deploy_tempo_cluster,
@@ -26,9 +27,8 @@ logger = logging.getLogger(__name__)
 
 def test_build_and_deploy(juju: Juju, mimir_charm, cos_channel):
     """Build the charm-under-test and deploy it together with related charms."""
-    charm, channel, resources = mimir_charm
     # deploy charms of interest
-    juju.deploy(charm, app=APP_NAME, channel=channel, resources=resources, trust=True)
+    juju.deploy(mimir_charm, app=APP_NAME, resources=charm_resources(), trust=True)
     juju.deploy(
         "mimir-worker-k8s",
         app=APP_WORKER_NAME,
@@ -61,7 +61,6 @@ def test_build_and_deploy(juju: Juju, mimir_charm, cos_channel):
         ),
         timeout=1000,
     )
-
 
 
 def test_workload_traces(juju: Juju):
