@@ -151,17 +151,3 @@ resource "juju_integration" "seaweedfs_mimir" {
   }
 }
 ```
-
-### Worker configuration options
-
-Each entry in the `workers` map accepts:
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `units` | `number` | `1` | Number of units for this worker role |
-| `config` | `map(string)` | `{}` | Charm configuration options |
-| `constraints` | `string` | `"arch=amd64"` | Juju constraints (ignored when `anti_affinity = true`) |
-| `storage_directives` | `map(string)` | `{}` | Storage directives for this worker |
-| `app_name` | `string` | `"mimir-<role>"` | Override the application name |
-
-Valid worker keys: `all`, `backend`, `read`, `write`.
