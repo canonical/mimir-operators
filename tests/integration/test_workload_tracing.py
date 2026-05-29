@@ -9,8 +9,7 @@ import logging
 import jubilant
 from helpers import (
     charm_resources,
-    configure_minio,
-    configure_s3_integrator,
+    deploy_swfs,
     deploy_tempo_cluster,
     get_application_ip,
     get_traces_patiently,
@@ -46,9 +45,8 @@ def test_build_and_deploy(juju: Juju, mimir_charm, cos_channel):
     # configure s3 integrator and minio for loki
     juju.wait(lambda status: jubilant.all_active(status, "minio"), timeout=1000)
     juju.wait(lambda status: jubilant.all_blocked(status, "s3"), timeout=1000)
-    configure_minio(juju)
-    configure_s3_integrator(juju)
-    juju.integrate(f"{APP_NAME}:s3", "s3")
+    deploy_swfs(juju)
+    juju.integrate(f"{APP_NAME}:s3", "swfs")
     juju.integrate(f"{APP_NAME}:mimir-cluster", APP_WORKER_NAME)
 
     # deploy Tempo cluster
