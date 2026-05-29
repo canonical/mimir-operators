@@ -11,8 +11,7 @@ import pytest
 import requests
 from helpers import (
     charm_resources,
-    configure_minio,
-    configure_s3_integrator,
+    deploy_swfs,
     get_grafana_datasources_from_client_pod,
     get_istio_ingress_ip,
     get_prometheus_targets_from_client_pod,
@@ -33,29 +32,17 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel, me
     juju.deploy("istio-k8s", "istio", channel=mesh_channel, trust=True)
     juju.deploy("istio-beacon-k8s", "istio-beacon", channel=mesh_channel, trust=True)
     juju.deploy("istio-ingress-k8s", "istio-ingress", channel=mesh_channel, trust=True)
-    # Secret must be at least 8 characters: https://github.com/canonical/minio-operator/issues/137
-    juju.deploy(
-        "minio",
-        channel="ckf-1.9/stable",
-        config={"access-key": "access", "secret-key": "secretsecret"},
-        trust=True,
-    )
-    juju.deploy("s3-integrator", "s3", channel="latest/stable", trust=True)
-
-    juju.wait(lambda s: jubilant.all_active(s, "minio"), timeout=1000)
-    juju.wait(lambda s: jubilant.all_blocked(s, "s3"), timeout=1000)
-    configure_minio(juju)
-    configure_s3_integrator(juju)
+    deploy_swfs(juju)
 
     juju.wait(
         lambda s: jubilant.all_active(
-            s, "prometheus", "grafana", "minio", "s3",
+            s, "prometheus", "grafana", "swfs",
             "istio", "istio-beacon", "istio-ingress", "otelcol",
         ),
         timeout=1000,
     )
 
-    juju.integrate("mimir:s3", "s3")
+    juju.integrate("mimir:s3", "swfs")
     juju.wait(lambda s: jubilant.all_blocked(s, "mimir"), timeout=1000)
 
 
@@ -93,7 +80,7 @@ def test_integrate(juju: jubilant.Juju):
     juju.wait(
         lambda s: jubilant.all_active(
             s, "mimir", "prometheus", "grafana", "otelcol",
-            "minio", "s3", "worker", "istio-ingress",
+            "swfs", "worker", "istio-ingress",
         ),
         timeout=1000,
         successes=10,
