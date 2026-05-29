@@ -23,7 +23,6 @@ dev = [
   "coverage[toml]",
   "deepdiff",
   # Integration
-  "minio",
   "tenacity",
   "juju",
   "jubilant",
