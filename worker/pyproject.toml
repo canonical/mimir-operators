@@ -20,7 +20,6 @@ dev = [
     "pytest",
     "coverage[toml]",
     # Integration
-    "minio",
     "tenacity",
     "juju",
     "pytest"

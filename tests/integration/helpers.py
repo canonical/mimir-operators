@@ -10,7 +10,6 @@ import requests
 import yaml
 from lightkube import Client
 from lightkube.generic_resource import create_namespaced_resource
-from minio import Minio
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
@@ -22,6 +21,8 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SWFS_APP = "swfs"
+SWFS_CHANNEL = "latest/edge"
 
 
 def charm_resources(metadata_file: str | None = None) -> dict[str, str]:
@@ -53,39 +54,10 @@ def get_unit_address(juju: jubilant.Juju, app_name: str, unit_no: int) -> str:
     return unit.address
 
 
-@retry(wait=wait_fixed(5), stop=stop_after_attempt(12))
-def _wait_for_minio_ready(minio_addr: str):
-    """Poll MinIO's readiness endpoint until the S3 API is actually serving."""
-    response = requests.get(f"http://{minio_addr}:9000/minio/health/ready", timeout=5)
-    assert response.status_code == 200, (
-        f"MinIO readiness check returned HTTP {response.status_code}"
-    )
-
-
-def configure_minio(juju: jubilant.Juju):
-    bucket_name = "mimir"
-    minio_addr = get_leader_address(juju, "minio")
-    _wait_for_minio_ready(minio_addr)
-    mc_client = Minio(
-        f"{minio_addr}:9000",
-        access_key="access",
-        secret_key="secretsecret",
-        secure=False,
-    )
-    if not mc_client.bucket_exists(bucket_name):
-        mc_client.make_bucket(bucket_name)
-
-
-def configure_s3_integrator(juju: jubilant.Juju):
-    model_name = juju.status().model.name
-    juju.config("s3", {
-        "endpoint": f"minio-0.minio-endpoints.{model_name}.svc.cluster.local:9000",
-        "bucket": "mimir",
-    })
-    juju.run("s3/leader", "sync-s3-credentials", {
-        "access-key": "access",
-        "secret-key": "secretsecret",
-    })
+def deploy_swfs(juju: jubilant.Juju, swfs_app: str = SWFS_APP):
+    """Deploy SeaweedFS as an S3 test backend."""
+    juju.deploy("seaweedfs-k8s", swfs_app, channel=SWFS_CHANNEL)
+    juju.wait(lambda s: jubilant.all_active(s, swfs_app), timeout=1000)
 
 
 def get_grafana_datasources_from_client_localhost(
