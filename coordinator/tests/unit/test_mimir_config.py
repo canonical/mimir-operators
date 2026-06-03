@@ -108,6 +108,28 @@ def test_build_compactor_config(mimir_config):
     assert compactor_config == expected_config
 
 
+def test_get_grpc_addresses_returns_sorted_addresses(mimir_config, coordinator):
+    # GIVEN the coordinated workers' cluster interface returns the query-scheduler units' addresses in a non-deterministic order
+    coordinator.cluster.gather_addresses_by_role.return_value = {
+        "query-scheduler": [
+            "http://mimir-2.mimir-endpoints.model.svc.cluster.local:8080",
+            "http://mimir-0.mimir-endpoints.model.svc.cluster.local:8080",
+            "http://mimir-1.mimir-endpoints.model.svc.cluster.local:8080",
+        ]
+    }
+
+    # WHEN we call the _get_grpc_addresses method for the query-scheduler role
+    grpc_addresses = mimir_config._get_grpc_addresses(coordinator.cluster, "query-scheduler")
+
+    # THEN we should get back a sorted list of gRPC addresses (host:port) for the query-scheduler units
+    # Note that the port should be transformed from 8080 (HTTP) to 9095 (gRPC) in the output
+    assert grpc_addresses == [
+        "mimir-0.mimir-endpoints.model.svc.cluster.local:9095",
+        "mimir-1.mimir-endpoints.model.svc.cluster.local:9095",
+        "mimir-2.mimir-endpoints.model.svc.cluster.local:9095",
+    ]
+
+
 @pytest.mark.parametrize(
     "addresses_by_role, expected_config",
     [

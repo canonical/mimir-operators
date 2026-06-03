@@ -203,7 +203,10 @@ class MimirConfig:
         }
 
     def _get_grpc_addresses(self, cluster: ClusterProvider, role: str) -> List[str]:
-        """Extract gRPC addresses (host:port) for a given role from the cluster."""
+        """Extract gRPC addresses (host:port) for a given role from the cluster.
+
+        We return a sorted list to avoid issues such as: https://github.com/canonical/cos-coordinated-workers/issues/158.
+        """
         addresses = cluster.gather_addresses_by_role().get(role, [])
         grpc_addresses = []
         for addr in addresses:
@@ -216,7 +219,7 @@ class MimirConfig:
                 hostname = addr.split(":")[0]
             if hostname:
                 grpc_addresses.append(f"{hostname}:{MIMIR_GRPC_LISTEN_PORT}")
-        return grpc_addresses
+        return sorted(grpc_addresses)
 
     # scheduler_address:
     # Address of the query-scheduler component, in host:port format.
