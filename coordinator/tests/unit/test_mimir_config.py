@@ -109,6 +109,7 @@ def test_build_compactor_config(mimir_config):
 
 
 def test_get_grpc_addresses_returns_sorted_addresses(mimir_config, coordinator):
+    # We ensure that we return a sorted list to avoid issues such as: https://github.com/canonical/cos-coordinated-workers/issues/158.
     # GIVEN the coordinated workers' cluster interface returns the query-scheduler units' addresses in a non-deterministic order
     coordinator.cluster.gather_addresses_by_role.return_value = {
         "query-scheduler": [

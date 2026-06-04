@@ -203,10 +203,7 @@ class MimirConfig:
         }
 
     def _get_grpc_addresses(self, cluster: ClusterProvider, role: str) -> List[str]:
-        """Extract gRPC addresses (host:port) for a given role from the cluster.
-
-        We return a sorted list to avoid issues such as: https://github.com/canonical/cos-coordinated-workers/issues/158.
-        """
+        """Extract gRPC addresses (host:port) for a given role from the cluster."""
         addresses = cluster.gather_addresses_by_role().get(role, [])
         grpc_addresses = []
         for addr in addresses:
