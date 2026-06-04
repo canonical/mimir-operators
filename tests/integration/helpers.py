@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-import jubilant
+import jubilant 
 import requests
 import yaml
 from lightkube import Client
@@ -16,7 +16,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import format_trace_id
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_fixed, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -302,3 +302,52 @@ def service_mesh(
                 f"{beacon_app_name}:service-mesh", f"{app}:service-mesh"
             )
     juju.wait(jubilant.all_active, timeout=1000, successes=10, delay=3)
+
+
+def get_traces(tempo_host: str, service_name="tracegen-otlp_http", tls=True):
+    """Get traces directly from Tempo REST API."""
+    url = f"{'https' if tls else 'http'}://{tempo_host}:3200/api/search?tags=service.name={service_name}"
+    req = requests.get(
+        url,
+        verify=False,
+    )
+    assert req.status_code == 200
+    traces = json.loads(req.text)["traces"]
+    return traces
+
+
+@retry(stop=stop_after_attempt(15), wait=wait_exponential(multiplier=1, min=4, max=10))
+def get_traces_patiently(tempo_host, service_name="tracegen-otlp_http", tls=True):
+    """Get traces directly from Tempo REST API, but also try multiple times.
+
+    Useful for cases when Tempo might not return the traces immediately (its API is known
+    for returning data in random order).
+    """
+    traces = get_traces(tempo_host, service_name=service_name, tls=tls)
+    assert len(traces) > 0
+    return traces
+
+def get_application_ip(juju: jubilant.Juju, app_name: str) -> str:
+    """Get the application IP address."""
+    status = juju.status()
+    return status.apps[app_name].address
+
+def deploy_tempo_cluster(juju: jubilant.Juju, cos_channel: str):
+    """Deploy Tempo in its HA version and relate it to SeaweedFS."""
+    tempo_app = "tempo"
+    worker_app = "tempo-worker"
+
+    juju.deploy("tempo-worker-k8s", app=worker_app, channel=cos_channel, trust=True)
+    juju.deploy("tempo-coordinator-k8s", app=tempo_app, channel=cos_channel, trust=True)
+
+    juju.wait(lambda status: jubilant.all_active(status, SWFS_APP), timeout=1000)
+    juju.integrate(f"{tempo_app}:s3", SWFS_APP)
+    juju.integrate(f"{tempo_app}:tempo-cluster", f"{worker_app}:tempo-cluster")
+
+    juju.wait(
+        lambda status: jubilant.all_active(status, tempo_app, worker_app, SWFS_APP),
+        timeout=2000,
+        delay=5,
+        successes=3,
+    )
+
