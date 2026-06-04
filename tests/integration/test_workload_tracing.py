@@ -7,6 +7,7 @@
 import logging
 
 import jubilant
+import pytest
 from helpers import (
     charm_resources,
     deploy_swfs,
@@ -35,16 +36,7 @@ def test_build_and_deploy(juju: Juju, mimir_charm, cos_channel):
         config={"role-all": True},
         trust=True,
     )
-    juju.deploy(
-        "minio",
-        channel="ckf-1.9/stable",
-        config={"access-key": "access", "secret-key": "secretsecret"},
-    )
-    juju.deploy("s3-integrator", app="s3", channel="latest/stable")
 
-    # configure s3 integrator and minio for loki
-    juju.wait(lambda status: jubilant.all_active(status, "minio"), timeout=1000)
-    juju.wait(lambda status: jubilant.all_blocked(status, "s3"), timeout=1000)
     deploy_swfs(juju)
     juju.integrate(f"{APP_NAME}:s3", "swfs")
     juju.integrate(f"{APP_NAME}:mimir-cluster", APP_WORKER_NAME)
@@ -55,7 +47,7 @@ def test_build_and_deploy(juju: Juju, mimir_charm, cos_channel):
     # wait until charms settle down
     juju.wait(
         lambda status: jubilant.all_agents_idle(status) and jubilant.all_active(
-            status, APP_WORKER_NAME, APP_NAME, "minio", "s3", TEMPO_APP_NAME, TEMPO_WORKER_APP_NAME
+            status, APP_WORKER_NAME, APP_NAME, "swfs", TEMPO_APP_NAME, TEMPO_WORKER_APP_NAME
         ),
         timeout=1000,
     )
@@ -75,6 +67,6 @@ def test_workload_traces(juju: Juju):
     # verify workload traces are ingested into Tempo
     assert get_traces_patiently(
         get_application_ip(juju, TEMPO_APP_NAME),
-        service_name="mimir",
+        service_name="mimir-all",
         tls=False,
     )
