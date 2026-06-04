@@ -216,7 +216,7 @@ class MimirConfig:
                 hostname = addr.split(":")[0]
             if hostname:
                 grpc_addresses.append(f"{hostname}:{MIMIR_GRPC_LISTEN_PORT}")
-        return grpc_addresses
+        return sorted(grpc_addresses)
 
     # scheduler_address:
     # Address of the query-scheduler component, in host:port format.
