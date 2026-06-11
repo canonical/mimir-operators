@@ -32,7 +32,7 @@ from charms.mimir_coordinator_k8s.v0.prometheus_api import PrometheusApiProvider
 from charms.prometheus_k8s.v1.prometheus_remote_write import PrometheusRemoteWriteProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from coordinated_workers.coordinator import Coordinator
-from coordinated_workers.nginx import CA_CERT_PATH, CERT_PATH, KEY_PATH, NginxConfig
+from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
 from coordinated_workers.telemetry_correlation import TelemetryCorrelation
 from coordinated_workers.worker_telemetry import WorkerTelemetryProxyConfig
 from cosl import JujuTopology
@@ -249,9 +249,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
 
         return (
             nginx_container.can_connect()
-            and nginx_container.exists(CERT_PATH)
-            and nginx_container.exists(KEY_PATH)
-            and nginx_container.exists(CA_CERT_PATH)
+            and nginx_container.exists(TLSConfigManager.CERT_PATH)
+            and nginx_container.exists(TLSConfigManager.KEY_PATH)
+            and nginx_container.exists(TLSConfigManager.CA_CERT_PATH)
         )
 
     @property

@@ -4,7 +4,7 @@
 from unittest.mock import patch
 
 import scenario
-from coordinated_workers.nginx import Nginx
+from charmlibs.nginx_k8s import Nginx
 from helpers import get_relation_data
 from scenario import Relation, State
 
