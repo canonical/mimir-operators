@@ -46,6 +46,7 @@ def nginx_container():
             Exec(["mimirtool", "rules", "sync", address_arg, "--id=anonymous"], return_code=0),
             Exec(["mimirtool", "rules", "sync", address_arg_tls, "--id=anonymous"], return_code=0),
             Exec(["update-ca-certificates", "--fresh"], return_code=0),
+            Exec(["nginx", "-s", "reload"], return_code=0),
         },
     )
 

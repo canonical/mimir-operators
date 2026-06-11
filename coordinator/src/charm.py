@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 import ops
 import yaml
+from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueItem
 from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
@@ -32,7 +33,6 @@ from charms.mimir_coordinator_k8s.v0.prometheus_api import PrometheusApiProvider
 from charms.prometheus_k8s.v1.prometheus_remote_write import PrometheusRemoteWriteProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from coordinated_workers.coordinator import Coordinator
-from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
 from coordinated_workers.telemetry_correlation import TelemetryCorrelation
 from coordinated_workers.worker_telemetry import WorkerTelemetryProxyConfig
 from cosl import JujuTopology
