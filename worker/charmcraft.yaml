@@ -34,7 +34,7 @@ assumes:
   - juju >= 3.6
 
 platforms:
-  ubuntu@24.04:amd64:
+  ubuntu@26.04:amd64:
 
 parts:
   charm:
@@ -59,7 +59,7 @@ resources:
   mimir-image:
     type: oci-image
     description: OCI image for Grafana Mimir
-    upstream-source: docker.io/ubuntu/mimir@sha256:c36586852ba122d450485aadfbe3df51674f697c0fe3ce8a90dcd13f0d0f6c06  # renovate: oci-image tag: 2.17-24.04
+    upstream-source: docker.io/ubuntu/mimir@sha256:f16f51e2a3e448c304cfe18d65efa84c887f30c2101c2c9fef4def4b86de53b3  # renovate: oci-image tag: 2.17-26.04
 
 storage:
   data:
