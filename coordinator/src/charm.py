@@ -11,6 +11,7 @@ https://discourse.charmhub.io/t/4208
 """
 
 import hashlib
+import json
 import logging
 import socket
 from typing import Any, Dict, List, Optional, Union, cast
@@ -30,6 +31,9 @@ from charms.mimir_coordinator_k8s.v0.prometheus_api import (
     DEFAULT_RELATION_NAME as PROMETHEUS_API_RELATION_NAME,
 )
 from charms.mimir_coordinator_k8s.v0.prometheus_api import PrometheusApiProvider
+from charms.prometheus_k8s.v1.prometheus_remote_write import (
+    DEFAULT_RELATION_NAME as REMOTE_WRITE_RELATION_NAME,
+)
 from charms.prometheus_k8s.v1.prometheus_remote_write import PrometheusRemoteWriteProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from coordinated_workers.coordinator import Coordinator
@@ -424,6 +428,33 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         if not is_valid_timespec(self.retention_period):
             logger.info(f"Suspending data deletion due to invalid option set in config: {self.retention_period}. To resume data deletion, please reset value to a valid option.")
             event.add_status(BlockedStatus(f"Invalid config option (see debug-log): retention_period={self.retention_period}"))
+        if self._has_alert_rule_errors():
+            msg = "Invalid alert rules. See debug-log"
+            logger.error(msg)
+            event.add_status(BlockedStatus(msg))
+
+    def _has_alert_rule_errors(self) -> bool:
+        """Check if any remote-write relation reported validation errors."""
+        for relation in self.model.relations.get(REMOTE_WRITE_RELATION_NAME, []):
+            app_data = relation.data.get(self.app)
+            if not app_data:
+                continue
+
+            event_raw = app_data.get("event", "{}")
+            try:
+                event_data = json.loads(event_raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            if event_data.get("errors"):
+                logger.debug(
+                    "Alert rule validation error on relation %s: %s",
+                    relation.id,
+                    event_data["errors"],
+                )
+                return True
+
+        return False
 
     def _reconcile(self):
         # This method contains unconditional update logic, i.e. logic that should be executed
