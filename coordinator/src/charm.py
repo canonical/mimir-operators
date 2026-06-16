@@ -435,6 +435,8 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
 
     def _has_alert_rule_errors(self) -> bool:
         """Check if any remote-write relation reported validation errors."""
+        if not self.unit.is_leader():
+            return False
         for relation in self.model.relations.get(REMOTE_WRITE_RELATION_NAME, []):
             app_data = relation.data.get(self.app)
             if not app_data:
