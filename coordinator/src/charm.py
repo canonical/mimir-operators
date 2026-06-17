@@ -216,7 +216,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def _catalogue_item(self) -> CatalogueItem:
         api_endpoints = {
             "Prometheus rules": "/prometheus/api/v1/rules",
-            "Active alerts": "/promtheus/api/v1/alerts",
+            "Active alerts": "/prometheus/api/v1/alerts",
             "Query": "/prometheus/api/v1/query",
             "Push": "/api/v1/push",
             "OTLP metrics": "/otlp/v1/metrics",
