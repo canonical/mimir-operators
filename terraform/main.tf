@@ -11,55 +11,25 @@ module "mimir_coordinator" {
   units              = var.coordinator_units
 }
 
-module "mimir_backend" {
-  source     = "../worker/terraform"
-  depends_on = [module.mimir_coordinator]
-
-  app_name    = var.backend_name
-  channel     = var.channel
-  constraints = var.anti_affinity ? "arch=amd64 tags=anti-pod.app.kubernetes.io/name=${var.backend_name},anti-pod.topology-key=kubernetes.io/hostname" : var.worker_constraints
-  config = merge({
-    role-backend = true
-  }, var.backend_config)
-  model_uuid         = var.model_uuid
-  resources          = var.worker_resources
-  revision           = var.worker_revision
-  storage_directives = var.backend_worker_storage_directives
-  units              = var.backend_units
+locals {
+  workers = { for k, v in var.workers : k => merge(v, {
+    app_name = coalesce(v.app_name, "mimir-${k}")
+  }) }
 }
 
-module "mimir_read" {
-  source     = "../worker/terraform"
-  depends_on = [module.mimir_coordinator]
+module "mimir_worker" {
+  for_each = local.workers
+  source   = "../worker/terraform"
 
-  app_name = var.read_name
-  channel  = var.channel
-  config = merge({
-    role-read = true
-  }, var.read_config)
-  constraints        = var.anti_affinity ? "arch=amd64 tags=anti-pod.app.kubernetes.io/name=${var.read_name},anti-pod.topology-key=kubernetes.io/hostname" : var.worker_constraints
+  app_name           = each.value.app_name
+  channel            = var.channel
+  config             = merge({ "role-${each.key}" = "true" }, each.value.config)
+  constraints        = var.anti_affinity ? "arch=amd64 tags=anti-pod.app.kubernetes.io/name=${each.value.app_name},anti-pod.topology-key=kubernetes.io/hostname" : each.value.constraints
   model_uuid         = var.model_uuid
   resources          = var.worker_resources
   revision           = var.worker_revision
-  storage_directives = var.read_worker_storage_directives
-  units              = var.read_units
-}
-
-module "mimir_write" {
-  source     = "../worker/terraform"
-  depends_on = [module.mimir_coordinator]
-
-  app_name = var.write_name
-  channel  = var.channel
-  config = merge({
-    role-write = true
-  }, var.write_config)
-  constraints        = var.anti_affinity ? "arch=amd64 tags=anti-pod.app.kubernetes.io/name=${var.write_name},anti-pod.topology-key=kubernetes.io/hostname" : var.worker_constraints
-  model_uuid         = var.model_uuid
-  resources          = var.worker_resources
-  revision           = var.worker_revision
-  storage_directives = var.write_worker_storage_directives
-  units              = var.write_units
+  storage_directives = each.value.storage_directives
+  units              = each.value.units
 }
 
 # -------------- # S3-integrator --------------
@@ -117,7 +87,8 @@ resource "juju_integration" "coordinator_to_s3_integrator" {
   }
 }
 
-resource "juju_integration" "coordinator_to_read" {
+resource "juju_integration" "coordinator_to_worker" {
+  for_each   = local.workers
   model_uuid = var.model_uuid
 
   application {
@@ -126,35 +97,7 @@ resource "juju_integration" "coordinator_to_read" {
   }
 
   application {
-    name     = module.mimir_read.app_name
-    endpoint = module.mimir_read.requires.mimir_cluster
-  }
-}
-
-resource "juju_integration" "coordinator_to_write" {
-  model_uuid = var.model_uuid
-
-  application {
-    name     = module.mimir_coordinator.app_name
-    endpoint = module.mimir_coordinator.provides.mimir_cluster
-  }
-
-  application {
-    name     = module.mimir_write.app_name
-    endpoint = module.mimir_write.requires.mimir_cluster
-  }
-}
-
-resource "juju_integration" "coordinator_to_backend" {
-  model_uuid = var.model_uuid
-
-  application {
-    name     = module.mimir_coordinator.app_name
-    endpoint = module.mimir_coordinator.provides.mimir_cluster
-  }
-
-  application {
-    name     = module.mimir_backend.app_name
-    endpoint = module.mimir_backend.requires.mimir_cluster
+    name     = module.mimir_worker[each.key].app_name
+    endpoint = module.mimir_worker[each.key].requires.mimir_cluster
   }
 }
