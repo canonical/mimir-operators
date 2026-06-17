@@ -429,9 +429,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             logger.info(f"Suspending data deletion due to invalid option set in config: {self.retention_period}. To resume data deletion, please reset value to a valid option.")
             event.add_status(BlockedStatus(f"Invalid config option (see debug-log): retention_period={self.retention_period}"))
         if self._has_alert_rule_errors():
-            msg = "Invalid alert rules. See debug-log"
-            logger.error(msg)
-            event.add_status(BlockedStatus(msg))
+            event.add_status(BlockedStatus("Invalid alert rules. See debug-log"))
 
     def _has_alert_rule_errors(self) -> bool:
         """Check if any remote-write relation reported validation errors."""
@@ -449,7 +447,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 continue
 
             if event_data.get("errors"):
-                logger.debug(
+                logger.error(
                     "Alert rule validation error on relation %s: %s",
                     relation.id,
                     event_data["errors"],
