@@ -217,7 +217,7 @@ LIBAPI = 0
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
 
-LIBPATCH = 49
+LIBPATCH = 48
 
 PYDEPS = ["cosl >= 0.0.50"]
 
@@ -1013,7 +1013,7 @@ class CharmedDashboard:
 
         dashboard_templates = {}
 
-        for path in filter(_is_dashboard, Path(dashboards_path).glob("**/*")):
+        for path in filter(_is_dashboard, Path(dashboards_path).glob("*")):
             try:
                 dashboard_dict = json.loads(path.read_bytes())
             except json.JSONDecodeError as e:
