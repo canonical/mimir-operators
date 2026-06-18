@@ -23,7 +23,7 @@ import socket
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import yaml
 from cosl import JujuTopology
@@ -47,7 +47,7 @@ LIBAPI = 1
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 12
 
 PYDEPS = ["cosl"]
 
@@ -586,7 +586,7 @@ class PrometheusRemoteWriteConsumer(Object):
 
     def _duplicate_rules_per_unit(
         self,
-        alert_rules: Mapping[str, Any],
+        alert_rules: Dict[str, Any],
         peer_unit_names: Set[str],
         rule_names_to_duplicate: List[str],
         is_subordinate: bool = False,
@@ -603,7 +603,7 @@ class PrometheusRemoteWriteConsumer(Object):
             A Dict[str, any] the updated alert rules with the rules specified in rule_names_to_duplicate
             duplicated per unit. The list is to be assigned to the `groups` attribute of an object of type AlertRules.
         """
-        updated_alert_rules: Dict[str, Any] = copy.deepcopy(dict(alert_rules))
+        updated_alert_rules = copy.deepcopy(alert_rules)
 
         for group in updated_alert_rules.get("groups", {}):
             new_rules = []
@@ -751,10 +751,6 @@ class PrometheusRemoteWriteProvider(Object):
             self._on_consumers_changed,
         )
         self.framework.observe(
-            on_relation.relation_broken,
-            self._on_consumers_changed,
-        )
-        self.framework.observe(
             on_relation.relation_changed,
             self._on_relation_changed,
         )
@@ -762,9 +758,7 @@ class PrometheusRemoteWriteProvider(Object):
     def _on_consumers_changed(self, event: RelationEvent) -> None:
         if not isinstance(event, RelationBrokenEvent):
             self.update_endpoint(event.relation)
-            self.on.consumers_changed.emit()
-        else:
-            self.on.consumers_changed.emit()
+        self.on.consumers_changed.emit()
 
     def _on_relation_changed(self, event: RelationEvent) -> None:
         """Flag Providers that data has changed, so they can re-read alerts."""
@@ -848,7 +842,7 @@ class PrometheusRemoteWriteProvider(Object):
                 try:
                     scrape_metadata = json.loads(relation.data[relation.app]["scrape_metadata"])
                     identifier = JujuTopology.from_dict(scrape_metadata).identifier
-                    alerts[identifier] = self._tool.apply_label_matchers(alert_rules)
+                    alerts[identifier] = self._tool.apply_label_matchers(alert_rules)  # type: ignore
 
                 except KeyError as e:
                     logger.debug(
@@ -863,21 +857,16 @@ class PrometheusRemoteWriteProvider(Object):
                 )
                 continue
 
-            alerts[identifier] = alert_rules
             _, errmsg = self._tool.validate_alert_rules(alert_rules)
             if errmsg:
                 logger.error(f"Invalid alert rule file: {errmsg}")
-                if alerts[identifier]:
-                    del alerts[identifier]
                 if self._charm.unit.is_leader():
                     data = json.loads(relation.data[self._charm.app].get("event", "{}"))
                     data["errors"] = errmsg
                     relation.data[self._charm.app]["event"] = json.dumps(data)
                 continue
-            if self._charm.unit.is_leader():
-                data = json.loads(relation.data[self._charm.app].get("event", "{}"))
-                data.pop("errors", None)
-                relation.data[self._charm.app]["event"] = json.dumps(data)
+
+            alerts[identifier] = alert_rules
 
         return alerts
 
