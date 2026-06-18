@@ -1,4 +1,5 @@
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -9,7 +10,6 @@ import yaml
 from lightkube import Client
 from lightkube.generic_resource import create_namespaced_resource
 from minio import Minio
-from opentelemetry import metrics
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
@@ -175,7 +175,11 @@ def push_to_otelcol(juju: jubilant.Juju, metric_name: str) -> str:
     """Push a metric along with a trace ID to an OpenTelemetry Collector.
 
     This creates an exemplar by attaching a trace ID provided by the
-    OpenTelemetry SDK to a metric.
+    OpenTelemetry SDK to a metric.  The meter provider is shut down before
+    returning to force a synchronous flush of all pending metric data.
+
+    Each call creates a fresh, local MeterProvider (no global state) so the
+    function can safely be called multiple times in a retry loop.
     """
     otel_url = get_leader_address(juju, "otelcol")
     collector_endpoint = f"http://{otel_url}:4318/v1/metrics"
@@ -188,8 +192,7 @@ def push_to_otelcol(juju: jubilant.Juju, metric_name: str) -> str:
     otlp_exporter = OTLPMetricExporter(endpoint=collector_endpoint)
     metric_reader = PeriodicExportingMetricReader(otlp_exporter, export_interval_millis=5000)
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
-    metrics.set_meter_provider(meter_provider)
-    meter = metrics.get_meter("meter", "1.0.0")
+    meter = meter_provider.get_meter("meter", "1.0.0")
     counter = meter.create_counter(metric_name, description="A placeholder counter metric")
     tracer_provider = TracerProvider()
 
@@ -199,19 +202,23 @@ def push_to_otelcol(juju: jubilant.Juju, metric_name: str) -> str:
         trace_id_hex = format_trace_id(trace_id)
         counter.add(100, {"trace_id": trace_id_hex})
 
+    meter_provider.shutdown()
     return trace_id_hex
 
 
-@retry(wait=wait_fixed(20), stop=stop_after_attempt(6))
-def query_exemplars(
+@retry(wait=wait_fixed(20), stop=stop_after_attempt(5))
+def _query_exemplars(
     juju: jubilant.Juju, query_name: str, coordinator_app: str
-) -> str | None:
+) -> str:
+    """Query Mimir for exemplar data and return the trace_id."""
     mimir_url = get_leader_address(juju, coordinator_app)
     response = requests.get(
         f"http://{mimir_url}:8080/prometheus/api/v1/query_exemplars",
-        params={"query": f"{query_name}_total"},
+        params={"query": query_name},
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, (
+        f"query_exemplars got HTTP {response.status_code}: {response.text[:200]}"
+    )
 
     response_data = response.json()
     assert response_data.get("data", []), "No exemplar data found in Mimir's API."
@@ -221,6 +228,21 @@ def query_exemplars(
     assert exemplars[0].get("labels", {})
     assert exemplars[0]["labels"].get("trace_id"), "No trace_id found in data returned from Mimir"
     return exemplars[0]["labels"]["trace_id"]
+
+
+@retry(wait=wait_fixed(30), stop=stop_after_attempt(5))
+def push_and_verify_exemplars(juju: jubilant.Juju, coordinator_app: str) -> None:
+    """Push exemplar data to otelcol and verify it reaches Mimir.
+
+    Retries the full push-then-query cycle to handle transient pipeline issues
+    (e.g. otelcol still reconfiguring remote-write exporters after a relation
+    URL change).  Each attempt uses a unique metric name so stale data from a
+    prior failed push cannot satisfy the query.
+    """
+    metric_name = f"sample_metric_{uuid.uuid4().hex[:8]}"
+    trace_id = push_to_otelcol(juju, metric_name=metric_name)
+    found = _query_exemplars(juju, query_name=metric_name, coordinator_app=coordinator_app)
+    assert found == trace_id, f"Trace ID mismatch: expected {trace_id}, got {found}"
 
 
 def get_istio_ingress_ip(juju: jubilant.Juju, app_name: str = "istio-ingress") -> str:
