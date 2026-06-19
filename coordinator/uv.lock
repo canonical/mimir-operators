@@ -186,15 +186,11 @@ wheels = [
 
 [[package]]
 name = "charmlibs-nginx-k8s"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
+version = "1.0.0"
+source = { git = "https://github.com/sinapah/charmlibs.git?subdirectory=nginx_k8s&rev=feat%2Fnginx-exporter-configure-tls#62ca83703318813828b76654fa3e79c8006044eb" }
 dependencies = [
     { name = "crossplane" },
     { name = "ops" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a4/ba/1aacb27aa6b8cce0dbb30bba56e79336683ac981682bb761edab1d378f78/charmlibs_nginx_k8s-0.1.0.tar.gz", hash = "sha256:6e1486289546d5ee8f108aae01e886728c27aa556e1a18d0a57ab84aab4e4ab1", size = 36645, upload-time = "2025-12-15T09:38:22.362Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/51/eb217b37f1907a19768abaf65b598a0ac2cceb12dcca087c09c7fbd716c8/charmlibs_nginx_k8s-0.1.0-py3-none-any.whl", hash = "sha256:3ea564cf2ca052234ba75578060af4c2246d6cf0f4936dfe767f19f922bc289d", size = 17348, upload-time = "2025-12-15T09:38:20.946Z" },
 ]
 
 [[package]]
@@ -271,7 +267,7 @@ wheels = [
 [[package]]
 name = "coordinated-workers"
 version = "4.0.1"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/canonical/cos-coordinated-workers.git?rev=chore%2Fbump-charmlibs-nginx#86392086ae76463081403534dfc0206fb4efcfa8" }
 dependencies = [
     { name = "charmed-service-mesh-helpers" },
     { name = "charmlibs-interfaces-tls-certificates" },
@@ -282,10 +278,6 @@ dependencies = [
     { name = "lightkube-extensions" },
     { name = "ops", extra = ["tracing"] },
     { name = "pydantic" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/de/d0/6b6921e1fbb1e1a1539c37308683c6c1dea110419d3de45a945f3a7549c4/coordinated_workers-4.0.1.tar.gz", hash = "sha256:dc19d73285b6164e909bfad528ef18e5542fe0d092395101cc19189d6160b2fc", size = 379113, upload-time = "2026-04-30T16:11:40.949Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/3e/5ed2f4a4b9abb995d49a03bee9eca92263240edddf4ec5554ca8a2bc0721/coordinated_workers-4.0.1-py3-none-any.whl", hash = "sha256:9f753274a65a31874ea2c4ece7fd547209406aafed5f8748ab96f197d751c03d", size = 48498, upload-time = "2026-04-30T16:11:39.215Z" },
 ]
 
 [[package]]
@@ -755,7 +747,7 @@ dev = [
 requires-dist = [
     { name = "charmed-service-mesh-helpers", specifier = ">=0.2.0" },
     { name = "codespell", marker = "extra == 'dev'" },
-    { name = "coordinated-workers", specifier = ">=4" },
+    { name = "coordinated-workers", git = "https://github.com/canonical/cos-coordinated-workers.git?rev=chore%2Fbump-charmlibs-nginx" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "deepdiff", marker = "extra == 'dev'" },
     { name = "jubilant", marker = "extra == 'dev'" },
