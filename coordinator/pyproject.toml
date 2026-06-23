@@ -6,7 +6,7 @@ version = "0.0"
 requires-python = "~=3.14.0"
 
 dependencies = [
-  "coordinated-workers@ git+https://github.com/canonical/cos-coordinated-workers.git@chore/bump-charmlibs-nginx",
+  "coordinated-workers>=4.1.0",
   "charmed-service-mesh-helpers>=0.2.0",
   "lightkube-extensions",
 ]
