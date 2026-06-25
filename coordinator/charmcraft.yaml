@@ -48,6 +48,11 @@ parts:
     plugin: uv
     build-packages: [git]
     build-snaps: [astral-uv]
+  icon:
+    plugin: dump
+    source: .
+    stage:
+      - icon.svg
   cos-tool:
     plugin: dump
     source: https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_ARCH_BUILD_FOR}

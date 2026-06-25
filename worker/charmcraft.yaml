@@ -54,6 +54,11 @@ containers:
         location: /data
       - storage: recovery-data
         location: /recovery-data
+  icon:
+    plugin: dump
+    source: .
+    stage:
+      - icon.svg
 
 resources:
   mimir-image:
