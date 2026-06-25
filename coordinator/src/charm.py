@@ -162,6 +162,8 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         This event refreshes the PrometheusRemoteWriteProvider address.
         """
         logger.info("Ingress for app ready on '%s'", event.url)
+        if self.coordinator.can_handle_events:
+            self._reconcile()
 
     def _on_ingress_revoked(self, _) -> None:
         """Log the ingress address being revoked.
@@ -169,6 +171,8 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         This event refreshes the PrometheusRemoteWriteProvider address.
         """
         logger.info("Ingress for app revoked")
+        if self.coordinator.can_handle_events:
+            self._reconcile()
 
     ######################
     # === PROPERTIES === #
@@ -401,6 +405,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self._update_prometheus_api()
         self._update_datasource_exchange()
         self.grafana_source.update_source(source_url=f"{self.most_external_url}/prometheus")
+        self.remote_write_provider.update_endpoint()
 
 
     def _build_grafana_source_extra_fields(self) -> Dict[str, Any]:
