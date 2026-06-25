@@ -1,3 +1,4 @@
+import socket
 from typing import Union
 from unittest.mock import MagicMock, patch
 
@@ -6,7 +7,6 @@ from coordinated_workers.coordinator import Coordinator
 from helpers import get_key_from_worker_config_exemplars
 from ops.testing import ActiveStatus, BlockedStatus
 from scenario import Container, Exec, State
-    import socket
 
 from charm import ALERTS_HASH_PATH, NGINX_PORT
 from src.mimir_config import (
@@ -138,7 +138,6 @@ def test_alerts_hash_not_written_on_mimirtool_failure(
     would see "no change" and silently skip the sync, leaving Mimir without
     the updated alert rules indefinitely.
     """
-
     address_arg = f"--address=http://{socket.getfqdn()}:{NGINX_PORT}"
     failing_container = Container(
         "nginx",
