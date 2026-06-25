@@ -57,6 +57,7 @@ RULES_DIR = "/etc/mimir-alerts/rules"
 ALERTS_HASH_PATH = "/etc/mimir-alerts/alerts.sha256"
 NGINX_PORT = NginxHelper._port
 NGINX_TLS_PORT = NginxHelper._tls_port
+DEFAULT_COS_GLOBAL_SCRAPE_INTERVAL = "60s"
 
 
 class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
@@ -482,6 +483,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         metrics_to_traces_config = self._build_metrics_to_traces_config()
 
         return {
+            "timeInterval": DEFAULT_COS_GLOBAL_SCRAPE_INTERVAL,
             "httpHeaderName1": "X-Scope-OrgID",
             **metrics_to_traces_config,
         }
