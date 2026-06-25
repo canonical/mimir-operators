@@ -1,3 +1,4 @@
+import socket
 from typing import Union
 from unittest.mock import MagicMock, patch
 
@@ -5,8 +6,9 @@ import pytest as pytest
 from coordinated_workers.coordinator import Coordinator
 from helpers import get_key_from_worker_config_exemplars
 from ops.testing import ActiveStatus, BlockedStatus
-from scenario import State
+from scenario import Container, Exec, State
 
+from charm import ALERTS_HASH_PATH, NGINX_PORT
 from src.mimir_config import (
     MIMIR_ROLES_CONFIG,
     MINIMAL_DEPLOYMENT,
@@ -122,3 +124,42 @@ def test_config_retention_period(context, s3, all_worker, nginx_container, nginx
         config = get_key_from_worker_config_exemplars(state_out.relations, "mimir-cluster", "compactor_blocks_retention_period")
         assert config == expected_value
         assert isinstance(state_out.unit_status, expected_status)
+
+
+def test_alerts_hash_not_written_on_mimirtool_failure(
+    context,
+    s3,
+    all_worker,
+    nginx_prometheus_exporter_container,
+):
+    """The alerts hash must NOT be persisted when mimirtool exits non-zero.
+
+    If the hash were written before confirming success, subsequent hook runs
+    would see "no change" and silently skip the sync, leaving Mimir without
+    the updated alert rules indefinitely.
+    """
+    address_arg = f"--address=http://{socket.getfqdn()}:{NGINX_PORT}"
+    failing_container = Container(
+        "nginx",
+        can_connect=True,
+        execs={
+            Exec(
+                ["mimirtool", "rules", "sync", address_arg, "--id=anonymous"],
+                return_code=1,
+            ),
+            Exec(["update-ca-certificates", "--fresh"], return_code=0),
+        },
+    )
+
+    state_in = State(
+        relations=[s3, all_worker],
+        containers=[failing_container, nginx_prometheus_exporter_container],
+        leader=True,
+    )
+
+    with context(context.on.relation_changed(all_worker), state_in) as mgr:
+        state_out = mgr.run()
+
+    # THEN the hash file is absent so the next hook run retries the sync
+    nginx_fs = state_out.get_container("nginx").get_filesystem(context)
+    assert not (nginx_fs / ALERTS_HASH_PATH.lstrip("/")).exists()
