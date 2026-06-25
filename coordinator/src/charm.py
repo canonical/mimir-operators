@@ -36,6 +36,7 @@ from cosl.time_validation import is_valid_timespec
 from ops import ActiveStatus, BlockedStatus
 from ops.model import ModelError
 from ops.pebble import Error as PebbleError
+from ops.pebble import ExecError
 
 from mimir_config import MIMIR_ROLES_CONFIG, MimirConfig
 from nginx_config import NginxHelper
@@ -304,6 +305,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
 
         Assumes the nginx container can connect.
         """
+        if not self.unit.is_leader():
+            return
+
         # Get mimirtool if this is the first execution
         self._ensure_mimirtool()
 
@@ -321,23 +325,28 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             # Update the alert rules files on disk
             self._nginx_container.remove_path(RULES_DIR, recursive=True)
             rules_file_paths: List[str] = self._push_alert_rules(remote_write_alerts)
-            self._push(ALERTS_HASH_PATH, alerts_hash)
-            # Push the alert rules to the Mimir cluster (persisted in s3)
-            mimirtool_output = self._nginx_container.pebble.exec(
-                [
-                    "mimirtool",
-                    "rules",
-                    "sync",
-                    *rules_file_paths,
-                    f"--address={self.most_external_url}",
-                    "--id=anonymous",  # multitenancy is disabled, the default tenant is 'anonymous'
-                ],
-                encoding="utf-8",
-            )
-            if mimirtool_output.stdout:
-                logger.info(f"mimirtool: {mimirtool_output.stdout.read().strip()}")
-            if mimirtool_output.stderr:
-                logger.error(f"mimirtool (err): {mimirtool_output.stderr.read().strip()}")
+            # Push the alert rules to the Mimir cluster (persisted in s3).
+            # The hash is only written after a successful sync so that a failed
+            # mimirtool invocation is retried on the next hook run.
+            try:
+                stdout, stderr = self._nginx_container.pebble.exec(
+                    [
+                        "mimirtool",
+                        "rules",
+                        "sync",
+                        *rules_file_paths,
+                        f"--address={self.internal_url}",
+                        "--id=anonymous",  # multitenancy is disabled, the default tenant is 'anonymous'
+                    ],
+                    encoding="utf-8",
+                ).wait_output()
+                if stdout:
+                    logger.info("mimirtool: %s", stdout.strip())
+                if stderr:
+                    logger.warning("mimirtool: %s", stderr.strip())
+                self._push(ALERTS_HASH_PATH, alerts_hash)
+            except ExecError as e:
+                logger.error("mimirtool rules sync failed (exit %d): %s", e.exit_code, e.stderr)
 
     def _update_prometheus_api(self) -> None:
         """Update all applications related to us via the prometheus-api relation."""
