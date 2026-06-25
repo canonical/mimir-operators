@@ -125,6 +125,7 @@ def test_alerts_hash_not_written_on_mimirtool_failure(
                 return_code=1,
             ),
             Exec(["update-ca-certificates", "--fresh"], return_code=0),
+            Exec(["nginx", "-s", "reload"], return_code=0),
         },
     )
 

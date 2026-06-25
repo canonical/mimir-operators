@@ -385,7 +385,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 if stdout:
                     logger.info("mimirtool: %s", stdout.strip())
                 if stderr:
-                    logger.warning("mimirtool (stderr): %s", stderr.strip())
+                    logger.warning("mimirtool: %s", stderr.strip())
                 self._push(ALERTS_HASH_PATH, alerts_hash)
             except ExecError as e:
                 logger.error("mimirtool rules sync failed (exit %d): %s", e.exit_code, e.stderr)
