@@ -25,7 +25,6 @@ description: |
 
 links:
   documentation: https://documentation.ubuntu.com/observability/latest
-  website: https://charmhub.io/mimir-worker-k8s
   source: https://github.com/canonical/mimir-worker-k8s-operator
   issues: https://github.com/canonical/mimir-worker-k8s-operator/issues
 
@@ -54,6 +53,11 @@ containers:
         location: /data
       - storage: recovery-data
         location: /recovery-data
+  icon:
+    plugin: dump
+    source: .
+    stage:
+      - icon.svg
 
 resources:
   mimir-image:

@@ -31,7 +31,6 @@ description: |
 
 links:
   documentation: https://documentation.ubuntu.com/observability/latest
-  website: https://charmhub.io/mimir-coordinator-k8s
   source: https://github.com/canonical/mimir-coordinator-k8s-operator
   issues: https://github.com/canonical/mimir-coordinator-k8s-operator/issues
 
@@ -48,6 +47,11 @@ parts:
     plugin: uv
     build-packages: [git]
     build-snaps: [astral-uv]
+  icon:
+    plugin: dump
+    source: .
+    stage:
+      - icon.svg
   cos-tool:
     plugin: dump
     source: https://github.com/canonical/cos-tool/releases/latest/download/cos-tool-${CRAFT_ARCH_BUILD_FOR}
@@ -191,6 +195,7 @@ requires:
   service-mesh:
     limit: 1
     interface: service_mesh
+    optional: true
     description: |
       Subscribe this charm into a service mesh and create authorization policies.
       We forward to the beacon our authorization policies.
@@ -200,6 +205,7 @@ requires:
     # TODO: remove this relation when this is fixed:
     #   https://github.com/canonical/istio-beacon-k8s-operator/issues/91
     interface: cross_model_mesh
+    optional: true
 config:
   options:
     max_global_exemplars_per_user:
