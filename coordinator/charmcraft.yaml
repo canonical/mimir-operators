@@ -196,6 +196,7 @@ requires:
   service-mesh:
     limit: 1
     interface: service_mesh
+    optional: true
     description: |
       Subscribe this charm into a service mesh and create authorization policies.
       We forward to the beacon our authorization policies.
@@ -205,6 +206,7 @@ requires:
     # TODO: remove this relation when this is fixed:
     #   https://github.com/canonical/istio-beacon-k8s-operator/issues/91
     interface: cross_model_mesh
+    optional: true
 config:
   options:
     max_global_exemplars_per_user:
