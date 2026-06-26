@@ -419,6 +419,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         metrics_to_traces_config = self._build_metrics_to_traces_config()
 
         return {
+            "timeInterval": DEFAULT_COS_GLOBAL_SCRAPE_INTERVAL,
             "httpHeaderName1": "X-Scope-OrgID",
             **metrics_to_traces_config,
         }
