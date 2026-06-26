@@ -49,6 +49,12 @@ ALERTS_HASH_PATH = "/etc/mimir-alerts/alerts.sha256"
 NGINX_PORT = NginxHelper._port
 NGINX_TLS_PORT = NginxHelper._tls_port
 
+# 60s is expected to be the longest scrape interval in most deployments,
+# so setting timeInterval to it in Grafana when a grafana_source relation is
+# established would guarantee that timestep-sensitive artifacts such as
+# `$__rate_interval` variable and `irate` function would keep working as expected.
+DEFAULT_COS_GLOBAL_SCRAPE_INTERVAL = "60s"
+
 
 class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     """Charm the service."""
