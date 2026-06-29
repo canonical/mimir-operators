@@ -25,8 +25,8 @@ description: |
 
 links:
   documentation: https://documentation.ubuntu.com/observability/latest
-  source: https://github.com/canonical/mimir-worker-k8s-operator
-  issues: https://github.com/canonical/mimir-worker-k8s-operator/issues
+  source: https://github.com/canonical/mimir-operators
+  issues: https://github.com/canonical/mimir-operators/issues
 
 assumes:
   - k8s-api
