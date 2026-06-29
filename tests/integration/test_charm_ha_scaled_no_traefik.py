@@ -28,7 +28,7 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
         resources=charm_resources(),
         trust=True,
     )
-    juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
+    juju.deploy("opentelemetry-collector-k8s", "otelcol", channel=cos_channel, trust=True)
     deploy_swfs(juju)
 
     juju.wait(

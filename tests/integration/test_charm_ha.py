@@ -31,7 +31,7 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel):
     juju.deploy("loki-k8s", "loki", channel=cos_channel, trust=True)
     juju.deploy("grafana-k8s", "grafana", channel=cos_channel, trust=True)
     juju.deploy("traefik-k8s", "traefik", channel="latest/edge", trust=True)
-    juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
+    juju.deploy("opentelemetry-collector-k8s", "otelcol", channel=cos_channel, trust=True)
     deploy_swfs(juju)
 
     juju.wait(
