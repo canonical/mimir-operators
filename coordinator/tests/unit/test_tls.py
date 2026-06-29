@@ -1,14 +1,14 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import scenario
 from charmlibs.nginx_k8s import Nginx
 from helpers import get_relation_data
 from scenario import Relation, State
 
-from charm import NGINX_PORT, NGINX_TLS_PORT
+from charm import NGINX_PORT, NGINX_TLS_PORT, MimirCoordinatorK8SOperatorCharm
 
 
 def test_ingress_tls(
@@ -53,3 +53,51 @@ def test_ingress_tls(
         # THEN Loki publishes its Nginx TLS port in the ingress databag
         assert get_relation_data(state_out.relations, "ingress", "scheme") == '"https"'
         assert get_relation_data(state_out.relations, "ingress", "port") == str(NGINX_TLS_PORT)
+
+
+def _rules_sync_state(s3, all_worker, nginx_container, nginx_prometheus_exporter_container):
+    return State(
+        relations=[s3, all_worker],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        unit_status=scenario.ActiveStatus(),
+        leader=True,
+    )
+
+
+def test_rules_sync_command_omits_tls_ca_path_over_http(
+    context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container
+):
+    # GIVEN Mimir is served over HTTP (no certificates on disk)
+    state_in = _rules_sync_state(
+        s3, all_worker, nginx_container, nginx_prometheus_exporter_container
+    )
+    with context(context.on.update_status(), state_in) as mgr:
+        charm = mgr.charm
+        # WHEN the mimirtool rules sync command is built
+        command = charm._rules_sync_command(["/etc/mimir-alerts/rules/example.rules"])
+
+    # THEN the address is http and no TLS CA path is passed
+    assert any(arg.startswith("--address=http://") for arg in command)
+    assert not any(arg.startswith("--tls-ca-path=") for arg in command)
+
+
+def test_rules_sync_command_adds_tls_ca_path_over_https(
+    context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container
+):
+    # GIVEN Mimir is served over HTTPS (the cert is internally-issued; its CA is on disk)
+    state_in = _rules_sync_state(
+        s3, all_worker, nginx_container, nginx_prometheus_exporter_container
+    )
+    with context(context.on.update_status(), state_in) as mgr:
+        charm = mgr.charm
+        with patch.object(
+            MimirCoordinatorK8SOperatorCharm,
+            "internal_url",
+            new_callable=PropertyMock,
+            return_value="https://mimir.test:8080",
+        ):
+            # WHEN the mimirtool rules sync command is built
+            command = charm._rules_sync_command(["/etc/mimir-alerts/rules/example.rules"])
+
+    # THEN mimirtool is told to verify against Mimir's CA bundle (otelcol-operator#328)
+    assert any(arg.startswith("--tls-ca-path=") for arg in command)

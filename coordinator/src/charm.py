@@ -342,6 +342,28 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             with open("mimirtool", "rb") as f:
                 self._nginx_container.push("/usr/bin/mimirtool", source=f, permissions=0o744)
 
+    def _rules_sync_command(self, rules_file_paths: List[str]) -> List[str]:
+        """Build the ``mimirtool rules sync`` command.
+
+        When Mimir is served over TLS, ``mimirtool`` must be told which CA to trust;
+        otherwise ``rules sync`` fails certificate verification against Mimir's
+        (internally-issued) certificate and alert rules are never loaded. The CA bundle is
+        guaranteed to be on disk whenever ``internal_url`` is https (see ``are_certificates_on_disk``).
+
+        See https://github.com/canonical/opentelemetry-collector-operator/issues/328
+        """
+        command = [
+            "mimirtool",
+            "rules",
+            "sync",
+            *rules_file_paths,
+            f"--address={self.internal_url}",
+            "--id=anonymous",  # multitenancy is disabled, the default tenant is 'anonymous'
+        ]
+        if self.internal_url.startswith("https"):
+            command.append(f"--tls-ca-path={TLSConfigManager.CA_CERT_PATH}")
+        return command
+
     def _set_alerts(self):
         """Create alert rule files for all Mimir consumers.
 
@@ -372,14 +394,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             # mimirtool invocation is retried on the next hook run.
             try:
                 stdout, stderr = self._nginx_container.pebble.exec(
-                    [
-                        "mimirtool",
-                        "rules",
-                        "sync",
-                        *rules_file_paths,
-                        f"--address={self.internal_url}",
-                        "--id=anonymous",  # multitenancy is disabled, the default tenant is 'anonymous'
-                    ],
+                    self._rules_sync_command(rules_file_paths),
                     encoding="utf-8",
                 ).wait_output()
                 if stdout:
