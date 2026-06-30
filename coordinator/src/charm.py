@@ -22,7 +22,7 @@ import yaml
 from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
 from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
 from charms.catalogue_k8s.v1.catalogue import CatalogueItem
-from charms.grafana_k8s.v0.grafana_source import GrafanaSourceProvider
+from charms.grafana_k8s.v1.grafana_source import GrafanaSourceProvider
 from charms.istio_beacon_k8s.v0.service_mesh import (
     AppPolicy,
     UnitPolicy,
@@ -142,10 +142,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self.grafana_source = GrafanaSourceProvider(
             self,
             source_type="prometheus",
-            source_url=f"{self.most_external_url}/prometheus",
             extra_fields=self._build_grafana_source_extra_fields(),
             secure_extra_fields={"httpHeaderValue1": "anonymous"},
-            is_ingress_per_app=self.ingress.is_ready(),
+            app_datasource_url=f"{self.external_url or self._service_url}/prometheus",
         )
 
         self.remote_write_provider = PrometheusRemoteWriteProvider(
@@ -229,6 +228,18 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             return external_url
 
         return self.internal_url
+
+    @property
+    def _service_url(self) -> str:
+        """Return the K8s service URL (without unit prefix) for app-level datasources."""
+        scheme = "http"
+        port = NGINX_PORT
+        if hasattr(self, "coordinator") and self.coordinator.nginx.are_certificates_on_disk:
+            scheme = "https"
+            port = NGINX_TLS_PORT
+        # hostname is e.g. "mimir-0.mimir-coordinator-endpoints..."; strip unit prefix for service URL
+        service_hostname = self.hostname.split(".", 1)[-1]
+        return f"{scheme}://{service_hostname}:{port}"
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -491,7 +502,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self._ensure_mimirtool()
         self._update_prometheus_api()
         self._update_datasource_exchange()
-        self.grafana_source.update_source(source_url=f"{self.most_external_url}/prometheus")
+        self.grafana_source.update_app_source(
+            app_datasource_url=f"{self.external_url or self._service_url}/prometheus"
+        )
         self.remote_write_provider.update_endpoint()
 
         # Open necessary service ports. needed for telemetry proxying.

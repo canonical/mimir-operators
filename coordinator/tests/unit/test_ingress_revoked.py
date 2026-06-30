@@ -14,6 +14,7 @@ MIMIR_INGRESS_URL = "http://ingress.test/mimir"
 MIMIR_INGRESS_URL_HTTPS = "https://ingress.test/mimir"
 
 
+@patch("charm.MimirCoordinatorK8SOperatorCharm._service_url", PropertyMock(return_value=MIMIR_URL))
 @patch("charm.MimirCoordinatorK8SOperatorCharm.internal_url", PropertyMock(return_value=MIMIR_URL))
 @patch("charm.MimirCoordinatorK8SOperatorCharm._set_alerts", MagicMock())
 def test_remote_write_url_uses_internal_url_after_ingress_revoked(
@@ -44,7 +45,7 @@ def test_remote_write_url_uses_internal_url_after_ingress_revoked(
     assert MIMIR_INGRESS_URL.rstrip("/") in rw_url_after_ready
 
     # AND grafana-source URL contains the ingress URL
-    gs_url_after_ready = state.get_relation(grafana_source.id).local_unit_data["grafana_source_host"]
+    gs_url_after_ready = state.get_relation(grafana_source.id).local_app_data["grafana_source_app_host"]
     assert MIMIR_INGRESS_URL.rstrip("/") in gs_url_after_ready
 
     # WHEN ingress is revoked
@@ -59,11 +60,12 @@ def test_remote_write_url_uses_internal_url_after_ingress_revoked(
     )
 
     # AND grafana-source URL falls back to the internal URL
-    gs_url_after_revoked = state.get_relation(grafana_source.id).local_unit_data["grafana_source_host"]
+    gs_url_after_revoked = state.get_relation(grafana_source.id).local_app_data["grafana_source_app_host"]
     assert MIMIR_URL.rstrip("/") in gs_url_after_revoked
     assert MIMIR_INGRESS_URL.rstrip("/") not in gs_url_after_revoked
 
 
+@patch("charm.MimirCoordinatorK8SOperatorCharm._service_url", PropertyMock(return_value=MIMIR_URL))
 @patch("charm.MimirCoordinatorK8SOperatorCharm.internal_url", PropertyMock(return_value=MIMIR_URL))
 @patch("charm.MimirCoordinatorK8SOperatorCharm._set_alerts", MagicMock())
 def test_related_charms_updated_when_traefik_switches_ingress_url_to_https(
@@ -95,7 +97,7 @@ def test_related_charms_updated_when_traefik_switches_ingress_url_to_https(
     assert MIMIR_INGRESS_URL.rstrip("/") in rw_url_before
 
     # AND grafana-source URL contains the http ingress URL
-    gs_url_before = state.get_relation(grafana_source.id).local_unit_data["grafana_source_host"]
+    gs_url_before = state.get_relation(grafana_source.id).local_app_data["grafana_source_app_host"]
     assert MIMIR_INGRESS_URL.rstrip("/") in gs_url_before
 
     # WHEN Traefik updates the ingress relation data to provide an https URL
@@ -121,7 +123,7 @@ def test_related_charms_updated_when_traefik_switches_ingress_url_to_https(
     assert MIMIR_INGRESS_URL_HTTPS.rstrip("/") in rw_url_after
 
     # AND grafana-source URL is updated to the https ingress URL
-    gs_url_after = state.get_relation(grafana_source.id).local_unit_data["grafana_source_host"]
+    gs_url_after = state.get_relation(grafana_source.id).local_app_data["grafana_source_app_host"]
     assert MIMIR_INGRESS_URL_HTTPS.rstrip("/") in gs_url_after, (
         f"Expected https ingress URL in grafana-source but got: {gs_url_after}"
     )

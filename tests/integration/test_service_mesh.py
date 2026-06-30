@@ -28,7 +28,7 @@ def test_build_and_deploy(juju: jubilant.Juju, mimir_charm: str, cos_channel, me
     juju.deploy(mimir_charm, "mimir", resources=charm_resources(), trust=True)
     juju.deploy("prometheus-k8s", "prometheus", channel=cos_channel, trust=True)
     juju.deploy("grafana-k8s", "grafana", channel=cos_channel, trust=True)
-    juju.deploy("opentelemetry-collector-k8s", "otelcol", trust=True, channel=cos_channel)
+    juju.deploy("opentelemetry-collector-k8s", "otelcol", channel=cos_channel, trust=True)
     juju.deploy("istio-k8s", "istio", channel=mesh_channel, trust=True)
     juju.deploy("istio-beacon-k8s", "istio-beacon", channel=mesh_channel, trust=True)
     juju.deploy("istio-ingress-k8s", "istio-ingress", channel=mesh_channel, trust=True)
