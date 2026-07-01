@@ -20,12 +20,6 @@ This is a Terraform module facilitating the deployment of mimir-worker-k8s charm
 
 No modules.
 
-## Resources
-
-| Name | Type |
-|------|------|
-| [juju_application.mimir_worker](https://registry.terraform.io/providers/juju/juju/latest/docs/resources/application) | resource |
-
 ## Inputs
 
 | Name | Description | Type | Default | Required |
