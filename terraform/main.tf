@@ -1,6 +1,7 @@
 module "mimir_coordinator" {
   source             = "../coordinator/terraform"
   app_name           = "mimir"
+  base               = var.base
   channel            = var.channel
   config             = var.coordinator_config
   constraints        = var.anti_affinity ? "arch=amd64 tags=anti-pod.app.kubernetes.io/name=mimir,anti-pod.topology-key=kubernetes.io/hostname" : var.coordinator_constraints
@@ -16,6 +17,7 @@ module "mimir_backend" {
   depends_on = [module.mimir_coordinator]
 
   app_name    = var.backend_name
+  base        = var.base
   channel     = var.channel
   constraints = var.anti_affinity ? "arch=amd64 tags=anti-pod.app.kubernetes.io/name=${var.backend_name},anti-pod.topology-key=kubernetes.io/hostname" : var.worker_constraints
   config = merge({
@@ -33,6 +35,7 @@ module "mimir_read" {
   depends_on = [module.mimir_coordinator]
 
   app_name = var.read_name
+  base     = var.base
   channel  = var.channel
   config = merge({
     role-read = true
@@ -50,6 +53,7 @@ module "mimir_write" {
   depends_on = [module.mimir_coordinator]
 
   app_name = var.write_name
+  base     = var.base
   channel  = var.channel
   config = merge({
     role-write = true
@@ -97,6 +101,7 @@ resource "juju_application" "s3_integrator" {
 
   charm {
     name     = "s3-integrator"
+    base     = var.s3_integrator_base
     channel  = var.s3_integrator_channel
     revision = var.s3_integrator_revision
   }
