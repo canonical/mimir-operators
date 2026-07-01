@@ -14,8 +14,8 @@ variable "channel" {
   type        = string
 
   validation {
-    condition     = startswith(var.channel, "dev/")
-    error_message = "The track of the channel must be 'dev/'. e.g. 'dev/edge'."
+    condition     = startswith(var.channel, "2.17/")
+    error_message = "The track of the channel must be '2.17/'. e.g. '2.17/edge'."
   }
 }
 
