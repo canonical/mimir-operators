@@ -1,6 +1,7 @@
 name: Release Charm to Edge and Publish Libraries
 
 on:
+  workflow_dispatch: {}
   push:
     branches:
       - main
@@ -22,8 +23,10 @@ jobs:
       worker_changed: ${{ steps.worker-changed-files.outputs.any_modified }}
     steps:
       - name: Checkout repository
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Determine changed files in the coordinator
+        if: github.event_name != 'workflow_dispatch'
         id: coordinator-changed-files
         uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
         with:
@@ -38,6 +41,7 @@ jobs:
             .gitignore
             .github/**
       - name: Determine changed files in the worker
+        if: github.event_name != 'workflow_dispatch'
         id: worker-changed-files
         uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
         with:
@@ -53,7 +57,7 @@ jobs:
             .github/**
   release-worker:
     needs: charms-changed
-    if: needs.charms-changed.outputs.worker_changed == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.charms-changed.outputs.worker_changed == 'true'
     uses: canonical/observability/.github/workflows/charm-release.yaml@v2
     secrets: inherit
     with:
@@ -64,7 +68,7 @@ jobs:
       terraform-tag-prefix: tf-worker-
   release-coordinator:
     needs: charms-changed
-    if: needs.charms-changed.outputs.coordinator_changed == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.charms-changed.outputs.coordinator_changed == 'true'
     uses: canonical/observability/.github/workflows/charm-release.yaml@v2
     secrets: inherit
     with:
@@ -72,3 +76,13 @@ jobs:
       charm-path: coordinator
       git-tag-prefix: coordinator-
       terraform-tag-prefix: tf-coordinator-
+  release-terraform:
+    needs:
+      - release-worker
+      - release-coordinator
+    if: always() && (needs.release-worker.result == 'success' || needs.release-coordinator.result == 'success')
+    uses: canonical/observability/.github/workflows/terraform-release.yaml@v2
+    secrets:
+      OBSERVABILITY_NOCTUA_TOKEN: ${{ secrets.OBSERVABILITY_NOCTUA_TOKEN }}
+    with:
+      terraform-tag-prefix: tf-mimir-
