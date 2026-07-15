@@ -237,8 +237,13 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         if hasattr(self, "coordinator") and self.coordinator.nginx.are_certificates_on_disk:
             scheme = "https"
             port = NGINX_TLS_PORT
-        # hostname is e.g. "mimir-0.mimir-coordinator-endpoints..."; strip unit prefix for service URL
-        service_hostname = self.hostname.split(".", 1)[-1]
+        # The hostname we need is the ClusterIP service hostname, NOT the headless service hostname.
+        # If we use the headless service hostname, Grafana will fail to query Mimir as a datasource when there is no ingress AND internal TLS is used.
+        # See https://github.com/canonical/mimir-operators/issues/232 for details.
+        # The coordinator's app_hostname method will return the correct hostname for the service, which is <app-name>.<juju-model>.svc.cluster.local
+        service_hostname = self.coordinator.app_hostname(
+            self.hostname, self.app.name, self.model.name
+        )
         return f"{scheme}://{service_hostname}:{port}"
 
     @property
