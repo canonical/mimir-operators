@@ -167,6 +167,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
         self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
+        self.framework.observe(
+            self.on.certificates_relation_broken, self._on_certificates_changed
+        )
 
     ##########################
     # === EVENT HANDLERS === #
@@ -186,6 +189,12 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         logger.info("Ingress for app revoked")
         if self.coordinator.can_handle_events:
             self._reconcile()
+
+    def _on_certificates_changed(self, _) -> None:
+        """Certificates relation changed: reconcile ingress scheme/port."""
+        if self.coordinator.can_handle_events:
+            self._reconcile()
+
     ######################
     # === PROPERTIES === #
     ######################
@@ -513,6 +522,12 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         # Open necessary service ports. needed for telemetry proxying.
         nginx_port = NGINX_TLS_PORT if self.coordinator.tls_available else NGINX_PORT
         self.unit.set_ports(nginx_port)
+
+        # Re-publish ingress requirements so scheme/port reflect current TLS state.
+        # The scheme lambda is evaluated at publish time, so after the Coordinator's reconcile
+        # has synced certificates, this will correctly publish http or https.
+        if port := urlparse(self.internal_url).port:
+            self.ingress.provide_ingress_requirements(port=port)
 
 
     def _build_grafana_source_extra_fields(self) -> Dict[str, Any]:
