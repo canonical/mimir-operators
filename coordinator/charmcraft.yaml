@@ -217,10 +217,9 @@ config:
         Ref: https://grafana.com/docs/mimir/latest/manage/use-exemplars/store-exemplars/
       type: int
     metrics_retention_period:
-      default: "0"
+      default: "15d"
       description: |
         Sets a global retention period for metrics in Mimir. Supported units: d, w, m, y, h, s, ms or 0 for no limit (disable)
         When this value is set to an invalid value (e.g. "1week"), the charm will be blocked along with a relevant message.
-        To avoid data loss, the retention period will be set to the default of 0 in the worker config, effectively disabling data deletion.
       type: string
 
