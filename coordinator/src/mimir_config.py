@@ -113,6 +113,7 @@ class MimirConfig:
         root_data_dir: Path = Path("/data"),
         recovery_data_dir: Path = Path("/recovery-data"),
         metrics_retention_period: Optional[str] = None,
+        ingestion_rate: Optional[int] = None,
     ):
         self._alertmanager_urls = alertmanager_urls
         self._root_data_dir = root_data_dir
@@ -120,6 +121,7 @@ class MimirConfig:
         self._max_global_exemplars_per_user = max_global_exemplars_per_user
         self._topology = topology
         self._metrics_retention_period: str = metrics_retention_period or "0"
+        self._ingestion_rate = ingestion_rate
 
     def config(self, coordinator: Coordinator) -> str:
         """Generate shared config file for mimir.
@@ -376,11 +378,12 @@ class MimirConfig:
 
             # Per-tenant ingestion rate limit in samples per second.
             # CLI flag: -distributor.ingestion-rate-limit
-            "ingestion_rate": 100_000,  # default = 10000
+            "ingestion_rate": self._ingestion_rate if self._ingestion_rate is not None else 100_000,
 
             # Per-tenant allowed ingestion burst size (in number of samples).
+            # Automatically set to 20x the ingestion_rate, matching Mimir's default 20x ratio.
             # CLI flag: -distributor.ingestion-burst-size
-            "ingestion_burst_size": 2_000_000,  # default = 200000]
+            "ingestion_burst_size": (self._ingestion_rate if self._ingestion_rate is not None else 100_000) * 20,
         }
 
         # Set the max global exemplars per user based on the value of _max_global_exemplars_per_user
