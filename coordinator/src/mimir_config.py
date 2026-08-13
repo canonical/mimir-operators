@@ -362,6 +362,10 @@ class MimirConfig:
 
         Ref: https://grafana.com/docs/mimir/latest/configure/configuration-parameters/#limits
         """
+        # Per-tenant ingestion rate limit in samples per second. 0 to disable.
+        # CLI flag: -distributor.ingestion-rate-limit
+        ingestion_rate = self._ingestion_rate if self._ingestion_rate is not None else 100_000
+
         limits_config: Dict[str, Any] = {
             # Maximum number of rules per rule group per-tenant. 0 to disable.
             # CLI flag: -ruler.max-rules-per-rule-group
@@ -376,14 +380,12 @@ class MimirConfig:
             # CLI flag: -ingester.max-global-series-per-user
             "max_global_series_per_user": 0,  # default = 150000
 
-            # Per-tenant ingestion rate limit in samples per second.
-            # CLI flag: -distributor.ingestion-rate-limit
-            "ingestion_rate": self._ingestion_rate if self._ingestion_rate is not None else 100_000,
+            "ingestion_rate": ingestion_rate,
 
             # Per-tenant allowed ingestion burst size (in number of samples).
             # Automatically set to 20x the ingestion_rate, matching Mimir's default 20x ratio.
             # CLI flag: -distributor.ingestion-burst-size
-            "ingestion_burst_size": (self._ingestion_rate if self._ingestion_rate is not None else 100_000) * 20,
+            "ingestion_burst_size": ingestion_rate * 20,
         }
 
         # Set the max global exemplars per user based on the value of _max_global_exemplars_per_user

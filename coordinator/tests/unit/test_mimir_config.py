@@ -104,13 +104,10 @@ def test_max_global_exemplars_per_user_logic(mimir_config, max_global_exemplars_
         (0,       0,        0),           # 0 → limit disabled, burst also 0
         (50_000,  50_000,   1_000_000),   # custom value → burst = 20x
         (200_000, 200_000,  4_000_000),   # larger custom value
-        (-1,      0,        0),           # negative → clamped to 0 before passing in
     ],
 )
 def test_ingestion_rate_and_burst_logic(topology, ingestion_rate, expected_rate, expected_burst):
-    # Negative values are clamped to 0 by the caller (charm.py), so we replicate that here
-    clamped = max(0, ingestion_rate) if ingestion_rate is not None else None
-    cfg = MimirConfig(topology=topology, ingestion_rate=clamped)
+    cfg = MimirConfig(topology=topology, ingestion_rate=ingestion_rate)
     limits = cfg._build_limits_config()
     assert limits["ingestion_rate"] == expected_rate
     assert limits["ingestion_burst_size"] == expected_burst
