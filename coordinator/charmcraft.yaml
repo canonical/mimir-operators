@@ -216,6 +216,14 @@ config:
         Otherwise, the value is set to the greater of the setpoint or 100,000.
         Ref: https://grafana.com/docs/mimir/latest/manage/use-exemplars/store-exemplars/
       type: int
+    ingestion_rate:
+      default: 100000
+      description: |
+        Per-tenant ingestion rate limit in samples per second. 0 to disable.
+        Negative values are clamped to 0.
+        The ingestion burst size is automatically set to 20x this value.
+        CLI flag: -distributor.ingestion-rate-limit
+      type: int
     metrics_retention_period:
       default: "0"
       description: |
