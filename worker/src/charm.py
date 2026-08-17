@@ -26,7 +26,7 @@ from ops.pebble import Layer
 logger = logging.getLogger(__name__)
 
 
-_LEGACY_WORKER_PORTS = [8080]
+_WORKER_PORTS = [9009]
 
 
 
@@ -34,7 +34,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 
     container_name = "mimir"
-    _mimir_port = 8080
+    _mimir_port = 9009
 
     def __init__(self, *args):  # type: ignore
         super().__init__(*args)
@@ -69,7 +69,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
                 "upgrade the coordinator to a newer revision. Falling back now to "
                 "legacy behaviour and opening all ports."
             )
-            self.unit.set_ports(*_LEGACY_WORKER_PORTS)
+            self.unit.set_ports(*_WORKER_PORTS)
 
     # === UTILITY METHODS === #
 

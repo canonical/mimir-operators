@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from charmlibs.nginx_k8s import NginxConfig
@@ -17,11 +17,10 @@ def mock_ipv6(enable: bool):
 def nginx_config():
     def _nginx_config(tls=False, ipv6=True):
         with mock_ipv6(ipv6):
-            with patch.object(NginxHelper, "_tls_available", new=PropertyMock(return_value=tls)):
-                nginx_helper = NginxHelper(MagicMock())
-                return NginxConfig(server_name="localhost",
-                                    upstream_configs=nginx_helper.upstreams(),
-                                    server_ports_to_locations=nginx_helper.server_ports_to_locations())
+            nginx_helper = NginxHelper(MagicMock())
+            return NginxConfig(server_name="localhost",
+                                upstream_configs=nginx_helper.upstreams(),
+                                server_ports_to_locations=nginx_helper.server_ports_to_locations())
     return _nginx_config
 
 
@@ -32,20 +31,20 @@ def coordinator():
     coord.cluster = MagicMock()
     coord.cluster.gather_addresses_by_role = MagicMock(
         return_value={
-            "alertmanager": ["http://some.mimir.worker.0:8080"],
-            "overrides-exporter": ["http://some.mimir.worker.0:8080"],
-            "flusher": ["http://some.mimir.worker.0:8080"],
-            "query-frontend": ["http://some.mimir.worker.0:8080"],
-            "querier": ["http://some.mimir.worker.0:8080"],
-            "store-gateway": ["http://some.mimir.worker.1:8080"],
-            "ingester": ["http://some.mimir.worker.1:8080"],
-            "distributor": ["http://some.mimir.worker.1:8080"],
-            "ruler": ["http://some.mimir.worker.1:8080"],
-            "compactor": ["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"],
+            "alertmanager": ["http://some.mimir.worker.0:9009"],
+            "overrides-exporter": ["http://some.mimir.worker.0:9009"],
+            "flusher": ["http://some.mimir.worker.0:9009"],
+            "query-frontend": ["http://some.mimir.worker.0:9009"],
+            "querier": ["http://some.mimir.worker.0:9009"],
+            "store-gateway": ["http://some.mimir.worker.1:9009"],
+            "ingester": ["http://some.mimir.worker.1:9009"],
+            "distributor": ["http://some.mimir.worker.1:9009"],
+            "ruler": ["http://some.mimir.worker.1:9009"],
+            "compactor": ["http://some.mimir.worker.0:9009", "http://some.mimir.worker.1:9009"],
         }
     )
     coord.cluster.gather_addresses = MagicMock(
-        return_value=["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"]
+        return_value=["http://some.mimir.worker.0:9009", "http://some.mimir.worker.1:9009"]
     )
     coord.s3_ready = MagicMock(return_value=True)
     coord.nginx = MagicMock()
@@ -77,7 +76,7 @@ def topology():
     ],
 )
 def test_upstreams_config(nginx_config, coordinator, addresses_by_role):
-    nginx_port = 8080
+    nginx_port = 9009
     upstreams_config = nginx_config(tls=False).get_config(addresses_by_role, False)
     for role, addrs in addresses_by_role.items():
         assert f"upstream {role}" in upstreams_config
@@ -88,13 +87,13 @@ def test_upstreams_config(nginx_config, coordinator, addresses_by_role):
 @pytest.mark.parametrize("tls", (True, False))
 @pytest.mark.parametrize("ipv6", (True, False))
 def test_servers_config(ipv6, tls, nginx_config):
-    port = 8080
+    port = 9009
     server_config = nginx_config(tls=tls, ipv6=ipv6).get_config(
         {"distributor": ["address.one"]}, tls
     )
-    ipv4_args = "443 ssl" if tls else f"{port}"
+    ipv4_args = f"{port} ssl" if tls else f"{port}"
     assert f"listen {ipv4_args}" in  server_config
-    ipv6_args = "[::]:443 ssl" if tls else f"[::]:{port}"
+    ipv6_args = f"[::]:9009 ssl" if tls else f"[::]:{port}"
     if ipv6:
         assert f"listen {ipv6_args}" in server_config
     else:

@@ -160,7 +160,7 @@ def query_mimir_from_client_localhost(
     """Query Mimir API from the test host machine (outside the cluster)."""
     mimir_url = get_leader_address(juju, coordinator_app)
     response = requests.get(
-        f"http://{mimir_url}:8080/prometheus/api/v1/query",
+        f"http://{mimir_url}:9009/prometheus/api/v1/query",
         params={"query": query},
     )
     assert response.status_code == 200
@@ -178,7 +178,7 @@ def query_mimir_from_client_pod(
     """Query Mimir API from inside a pod (within the cluster)."""
     model_name = juju.status().model.name
     mimir_url = f"{coordinator_app}.{model_name}.svc.cluster.local"
-    url = f"http://{mimir_url}:8080/prometheus/api/v1/query"
+    url = f"http://{mimir_url}:9009/prometheus/api/v1/query"
     encoded_query = quote(query, safe="")
     task = juju.exec(f"curl -s '{url}?query={encoded_query}'", unit=source_pod)
     response_json = json.loads(task.stdout)
@@ -235,7 +235,7 @@ def _query_exemplars(
     """Query Mimir for exemplar data and return the trace_id."""
     mimir_url = get_leader_address(juju, coordinator_app)
     response = requests.get(
-        f"http://{mimir_url}:8080/prometheus/api/v1/query_exemplars",
+        f"http://{mimir_url}:9009/prometheus/api/v1/query_exemplars",
         params={"query": query_name},
     )
     assert response.status_code == 200, (
