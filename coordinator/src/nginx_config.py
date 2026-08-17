@@ -50,7 +50,7 @@ class NginxHelper:
         NginxLocationConfig(path="/api/v1/upload/block/", backend="compactor", modifier="="),
     ]
 
-    _port = 9009
+    _port = 8080
 
     def __init__(self, container: Container):
         self._container = container

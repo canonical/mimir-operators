@@ -26,7 +26,7 @@ from ops.pebble import Layer
 logger = logging.getLogger(__name__)
 
 
-_WORKER_PORTS = [9009]
+_WORKER_PORTS = [8080]
 
 
 
@@ -34,7 +34,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 
     container_name = "mimir"
-    _mimir_port = 9009
+    _mimir_port = 8080
 
     def __init__(self, *args):  # type: ignore
         super().__init__(*args)

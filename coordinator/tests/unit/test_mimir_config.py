@@ -32,20 +32,20 @@ def coordinator():
     coord.cluster = MagicMock()
     coord.cluster.gather_addresses_by_role = MagicMock(
         return_value={
-            "alertmanager": ["http://some.mimir.worker.0:9009"],
-            "overrides-exporter": ["http://some.mimir.worker.0:9009"],
-            "flusher": ["http://some.mimir.worker.0:9009"],
-            "query-frontend": ["http://some.mimir.worker.0:9009"],
-            "querier": ["http://some.mimir.worker.0:9009"],
-            "store-gateway": ["http://some.mimir.worker.1:9009"],
-            "ingester": ["http://some.mimir.worker.1:9009"],
-            "distributor": ["http://some.mimir.worker.1:9009"],
-            "ruler": ["http://some.mimir.worker.1:9009"],
-            "compactor": ["http://some.mimir.worker.0:9009", "http://some.mimir.worker.1:9009"],
+            "alertmanager": ["http://some.mimir.worker.0:8080"],
+            "overrides-exporter": ["http://some.mimir.worker.0:8080"],
+            "flusher": ["http://some.mimir.worker.0:8080"],
+            "query-frontend": ["http://some.mimir.worker.0:8080"],
+            "querier": ["http://some.mimir.worker.0:8080"],
+            "store-gateway": ["http://some.mimir.worker.1:8080"],
+            "ingester": ["http://some.mimir.worker.1:8080"],
+            "distributor": ["http://some.mimir.worker.1:8080"],
+            "ruler": ["http://some.mimir.worker.1:8080"],
+            "compactor": ["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"],
         }
     )
     coord.cluster.gather_addresses = MagicMock(
-        return_value=["http://some.mimir.worker.0:9009", "http://some.mimir.worker.1:9009"]
+        return_value=["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"]
     )
     coord.s3_ready = MagicMock(return_value=True)
     coord.nginx = MagicMock()
@@ -130,9 +130,9 @@ def test_get_grpc_addresses_returns_sorted_addresses(mimir_config, coordinator):
     # GIVEN the coordinated workers' cluster interface returns the query-scheduler units' addresses in a non-deterministic order
     coordinator.cluster.gather_addresses_by_role.return_value = {
         "query-scheduler": [
-            "http://mimir-2.mimir-endpoints.model.svc.cluster.local:9009",
-            "http://mimir-0.mimir-endpoints.model.svc.cluster.local:9009",
-            "http://mimir-1.mimir-endpoints.model.svc.cluster.local:9009",
+            "http://mimir-2.mimir-endpoints.model.svc.cluster.local:8080",
+            "http://mimir-0.mimir-endpoints.model.svc.cluster.local:8080",
+            "http://mimir-1.mimir-endpoints.model.svc.cluster.local:8080",
         ]
     }
 
@@ -140,7 +140,7 @@ def test_get_grpc_addresses_returns_sorted_addresses(mimir_config, coordinator):
     grpc_addresses = mimir_config._get_grpc_addresses(coordinator.cluster, "query-scheduler")
 
     # THEN we should get back a sorted list of gRPC addresses (host:port) for the query-scheduler units
-    # Note that the port should be transformed from 9009 (HTTP) to 9095 (gRPC) in the output
+    # Note that the port should be transformed from 8080 (HTTP) to 9095 (gRPC) in the output
     assert grpc_addresses == [
         "mimir-0.mimir-endpoints.model.svc.cluster.local:9095",
         "mimir-1.mimir-endpoints.model.svc.cluster.local:9095",
@@ -153,18 +153,18 @@ def test_get_grpc_addresses_returns_sorted_addresses(mimir_config, coordinator):
     [
         # With query-scheduler: frontend registers with scheduler
         (
-            {"query-scheduler": ["http://scheduler.host:9009"]},
+            {"query-scheduler": ["http://scheduler.host:8080"]},
             {"scheduler_address": "scheduler.host:9095"},
         ),
         # Multiple schedulers: only first address used (Mimir expects single host:port)
         (
-            {"query-scheduler": ["http://sched.0:9009", "http://sched.1:9009"]},
+            {"query-scheduler": ["http://sched.0:8080", "http://sched.1:8080"]},
             {"scheduler_address": "sched.0:9095"},
         ),
         # No scheduler: empty config
         ({}, {}),
         # Only query-frontend present, no scheduler: empty config (frontend section doesn't need self-reference)
-        ({"query-frontend": ["http://frontend.host:9009"]}, {}),
+        ({"query-frontend": ["http://frontend.host:8080"]}, {}),
         # Plain hostname (no scheme/port) as returned by real deployments
         (
             {"query-scheduler": ["sched-0.sched-endpoints.model.svc.cluster.local"]},
@@ -183,19 +183,19 @@ def test_build_frontend_config(mimir_config, coordinator, addresses_by_role, exp
     [
         # With query-scheduler: querier connects to scheduler
         (
-            {"query-scheduler": ["http://scheduler.host:9009"]},
+            {"query-scheduler": ["http://scheduler.host:8080"]},
             {"scheduler_address": "scheduler.host:9095"},
         ),
         # No scheduler but query-frontend exists: querier connects directly to frontend
         (
-            {"query-frontend": ["http://frontend.host:9009"]},
+            {"query-frontend": ["http://frontend.host:8080"]},
             {"frontend_address": "frontend.host:9095"},
         ),
         # Both scheduler and frontend: scheduler takes precedence
         (
             {
-                "query-scheduler": ["http://scheduler.host:9009"],
-                "query-frontend": ["http://frontend.host:9009"],
+                "query-scheduler": ["http://scheduler.host:8080"],
+                "query-frontend": ["http://frontend.host:8080"],
             },
             {"scheduler_address": "scheduler.host:9095"},
         ),
@@ -203,7 +203,7 @@ def test_build_frontend_config(mimir_config, coordinator, addresses_by_role, exp
         ({}, {}),
         # Multiple frontends (no scheduler): only first address used (Mimir expects single host:port)
         (
-            {"query-frontend": ["http://fe.0:9009", "http://fe.1:9009"]},
+            {"query-frontend": ["http://fe.0:8080", "http://fe.1:8080"]},
             {"frontend_address": "fe.0:9095"},
         ),
         # Plain hostnames (no scheme/port) as returned by real deployments
@@ -328,7 +328,7 @@ def test_build_memberlist_config(mimir_config, coordinator):
     memberlist_config = mimir_config._build_memberlist_config(coordinator.cluster)
     expected_config = {
         "cluster_label": "some-model_some-uuid_mimir",
-        "join_members": ["http://some.mimir.worker.0:9009", "http://some.mimir.worker.1:9009"],
+        "join_members": ["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"],
     }
     assert memberlist_config == expected_config
 

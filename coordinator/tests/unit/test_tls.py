@@ -94,7 +94,7 @@ def test_rules_sync_command_adds_tls_ca_path_over_https(
             MimirCoordinatorK8SOperatorCharm,
             "internal_url",
             new_callable=PropertyMock,
-            return_value="https://mimir.test:9009",
+            return_value="https://mimir.test:8080",
         ):
             # WHEN the mimirtool rules sync command is built
             command = charm._rules_sync_command(["/etc/mimir-alerts/rules/example.rules"])

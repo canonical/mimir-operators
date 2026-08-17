@@ -31,20 +31,20 @@ def coordinator():
     coord.cluster = MagicMock()
     coord.cluster.gather_addresses_by_role = MagicMock(
         return_value={
-            "alertmanager": ["http://some.mimir.worker.0:9009"],
-            "overrides-exporter": ["http://some.mimir.worker.0:9009"],
-            "flusher": ["http://some.mimir.worker.0:9009"],
-            "query-frontend": ["http://some.mimir.worker.0:9009"],
-            "querier": ["http://some.mimir.worker.0:9009"],
-            "store-gateway": ["http://some.mimir.worker.1:9009"],
-            "ingester": ["http://some.mimir.worker.1:9009"],
-            "distributor": ["http://some.mimir.worker.1:9009"],
-            "ruler": ["http://some.mimir.worker.1:9009"],
-            "compactor": ["http://some.mimir.worker.0:9009", "http://some.mimir.worker.1:9009"],
+            "alertmanager": ["http://some.mimir.worker.0:8080"],
+            "overrides-exporter": ["http://some.mimir.worker.0:8080"],
+            "flusher": ["http://some.mimir.worker.0:8080"],
+            "query-frontend": ["http://some.mimir.worker.0:8080"],
+            "querier": ["http://some.mimir.worker.0:8080"],
+            "store-gateway": ["http://some.mimir.worker.1:8080"],
+            "ingester": ["http://some.mimir.worker.1:8080"],
+            "distributor": ["http://some.mimir.worker.1:8080"],
+            "ruler": ["http://some.mimir.worker.1:8080"],
+            "compactor": ["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"],
         }
     )
     coord.cluster.gather_addresses = MagicMock(
-        return_value=["http://some.mimir.worker.0:9009", "http://some.mimir.worker.1:9009"]
+        return_value=["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"]
     )
     coord.s3_ready = MagicMock(return_value=True)
     coord.nginx = MagicMock()
@@ -76,7 +76,7 @@ def topology():
     ],
 )
 def test_upstreams_config(nginx_config, coordinator, addresses_by_role):
-    nginx_port = 9009
+    nginx_port = 8080
     upstreams_config = nginx_config(tls=False).get_config(addresses_by_role, False)
     for role, addrs in addresses_by_role.items():
         assert f"upstream {role}" in upstreams_config
@@ -87,13 +87,13 @@ def test_upstreams_config(nginx_config, coordinator, addresses_by_role):
 @pytest.mark.parametrize("tls", (True, False))
 @pytest.mark.parametrize("ipv6", (True, False))
 def test_servers_config(ipv6, tls, nginx_config):
-    port = 9009
+    port = 8080
     server_config = nginx_config(tls=tls, ipv6=ipv6).get_config(
         {"distributor": ["address.one"]}, tls
     )
     ipv4_args = f"{port} ssl" if tls else f"{port}"
     assert f"listen {ipv4_args}" in  server_config
-    ipv6_args = "[::]:9009 ssl" if tls else f"[::]:{port}"
+    ipv6_args = "[::]:8080 ssl" if tls else f"[::]:{port}"
     if ipv6:
         assert f"listen {ipv6_args}" in server_config
     else:

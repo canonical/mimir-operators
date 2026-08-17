@@ -43,7 +43,7 @@ nginx_container = Container(
                 "mimirtool",
                 "rules",
                 "sync",
-                f"--address=http://{socket.getfqdn()}:9009",
+                f"--address=http://{socket.getfqdn()}:8080",
                 "--id=anonymous",
             ],
             return_code=0,
