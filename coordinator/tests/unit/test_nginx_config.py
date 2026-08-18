@@ -93,7 +93,7 @@ def test_servers_config(ipv6, tls, nginx_config):
     )
     ipv4_args = f"{port} ssl" if tls else f"{port}"
     assert f"listen {ipv4_args}" in  server_config
-    ipv6_args = "[::]:8080 ssl" if tls else f"[::]:{port}"
+    ipv6_args = f"[::]:{port} ssl" if tls else f"[::]:{port}"
     if ipv6:
         assert f"listen {ipv6_args}" in server_config
     else:

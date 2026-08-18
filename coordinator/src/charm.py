@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 RULES_DIR = "/etc/mimir-alerts/rules"
 ALERTS_HASH_PATH = "/etc/mimir-alerts/alerts.sha256"
-NGINX_PORT = NginxHelper._port
+NGINX_PORT = NginxHelper.port
 
 
 # 60s is expected to be the longest scrape interval in most deployments,
@@ -282,13 +282,13 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 relation="receive-remote-write",
                 ports=[NGINX_PORT],
             ),
-            # Allow access to mimir API port for charms related over the grafana-source relation.
+            # Allow access to the mimir API port for charms related over the grafana-source relation.
             # This is a unit policy as mimir's unit address is published for querying metrics.
             UnitPolicy(
                 relation="grafana-source",
                 ports=[NGINX_PORT],
             ),
-            # Allow access to mimir API port for charms related over the prometheus-api relation.
+            # Allow access to the mimir API port for charms related over the prometheus-api relation.
             # This is a unit policy as mimir's unit address is published for querying via Prometheus API.
             UnitPolicy(
                 relation="prometheus-api",
