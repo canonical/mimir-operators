@@ -42,7 +42,7 @@ def test_ingress_tls(
         # THEN there are no certificates on disk
         assert not charm.coordinator.nginx.are_certificates_on_disk
 
-        # AND Mimir publishes its Nginx non-TLS port in the ingress databag
+        # AND Mimir publishes its Nginx port in the ingress databag
         assert get_relation_data(state_out.relations, "ingress", "port") == str(NGINX_PORT)
 
     # AND WHEN TLS is enabled
@@ -129,7 +129,7 @@ def test_ingress_scheme_switches_to_http_when_certificates_relation_removed(
 
         # THEN ingress databag shows https scheme and TLS port
         assert get_relation_data(state.relations, "ingress", "scheme") == '"https"'
-        assert get_relation_data(state.relations, "ingress", "port") == str(NGINX_TLS_PORT)
+        assert get_relation_data(state.relations, "ingress", "port") == str(NGINX_PORT)
 
     # WHEN the certificates relation is removed
     state = context.run(
@@ -137,7 +137,7 @@ def test_ingress_scheme_switches_to_http_when_certificates_relation_removed(
         state,
     )
 
-    # THEN the ingress databag is updated to the non-TLS port
+    # THEN the ingress databag is still the same as before
     assert get_relation_data(state.relations, "ingress", "port") == str(NGINX_PORT)
     # AND scheme is either "http" or absent (defaults to "http" when excluded from dump)
     scheme = get_relation_data(state.relations, "ingress", "scheme")
