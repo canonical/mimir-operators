@@ -8,7 +8,7 @@ from charmlibs.nginx_k8s import Nginx
 from helpers import get_relation_data
 from scenario import Relation, State
 
-from charm import NGINX_PORT, NGINX_TLS_PORT, MimirCoordinatorK8SOperatorCharm
+from charm import NGINX_PORT, MimirCoordinatorK8SOperatorCharm
 
 
 def test_ingress_tls(
@@ -50,9 +50,9 @@ def test_ingress_tls(
         # AND the ingress databag is updated
         state_out = context.run(context.on.relation_changed(ingress), state_in)
 
-        # THEN Mimir publishes its Nginx TLS port in the ingress databag
+        # THEN Mimir publishes its Nginx TLS scheme in the ingress databag (port stays the same)
         assert get_relation_data(state_out.relations, "ingress", "scheme") == '"https"'
-        assert get_relation_data(state_out.relations, "ingress", "port") == str(NGINX_TLS_PORT)
+        assert get_relation_data(state_out.relations, "ingress", "port") == str(NGINX_PORT)
 
 
 def _rules_sync_state(s3, all_worker, nginx_container, nginx_prometheus_exporter_container):

@@ -11,7 +11,6 @@ https://discourse.charmhub.io/t/4208
 """
 
 import hashlib
-import json
 import logging
 import socket
 from typing import Any, Dict, List, Optional, Union, cast
@@ -31,9 +30,6 @@ from charms.mimir_coordinator_k8s.v0.prometheus_api import (
     DEFAULT_RELATION_NAME as PROMETHEUS_API_RELATION_NAME,
 )
 from charms.mimir_coordinator_k8s.v0.prometheus_api import PrometheusApiProvider
-from charms.prometheus_k8s.v1.prometheus_remote_write import (
-    DEFAULT_RELATION_NAME as REMOTE_WRITE_RELATION_NAME,
-)
 from charms.prometheus_k8s.v1.prometheus_remote_write import PrometheusRemoteWriteProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from coordinated_workers.coordinator import Coordinator
@@ -55,8 +51,7 @@ logger = logging.getLogger(__name__)
 
 RULES_DIR = "/etc/mimir-alerts/rules"
 ALERTS_HASH_PATH = "/etc/mimir-alerts/alerts.sha256"
-NGINX_PORT = NginxHelper._port
-NGINX_TLS_PORT = NginxHelper._tls_port
+NGINX_PORT = NginxHelper.port
 
 
 # 60s is expected to be the longest scrape interval in most deployments,
@@ -117,6 +112,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 alertmanager_urls=self.alertmanager.get_cluster_info(),
                 max_global_exemplars_per_user=int(self.config["max_global_exemplars_per_user"]),
                 metrics_retention_period=self.retention_period if is_valid_timespec(self.retention_period) else None,
+                ingestion_rate=max(0, int(self.config["ingestion_rate"])),
             ).config,
             worker_ports=lambda _: tuple({8080, 9095}),
             resources_requests=self.get_resource_requests,
@@ -208,11 +204,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def internal_url(self) -> str:
         """Returns workload's FQDN. Used for ingress."""
         scheme = "http"
-        port = NGINX_PORT
         if hasattr(self, "coordinator") and self.coordinator.nginx.are_certificates_on_disk:
             scheme = "https"
-            port = NGINX_TLS_PORT
-        return f"{scheme}://{self.hostname}:{port}"
+        return f"{scheme}://{self.hostname}:{NGINX_PORT}"
 
     @property
     def external_url(self) -> Optional[str]:
@@ -242,16 +236,14 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def _service_url(self) -> str:
         """Return the K8s service URL (without unit prefix) for app-level datasources."""
         scheme = "http"
-        port = NGINX_PORT
         if hasattr(self, "coordinator") and self.coordinator.nginx.are_certificates_on_disk:
             scheme = "https"
-            port = NGINX_TLS_PORT
 
         # We use the ClusterIP service, not the headless service to avoid https://github.com/canonical/mimir-operators/issues/232.
         service_hostname = self.coordinator.app_hostname(
             self.hostname, self.app.name, self.model.name
         )
-        return f"{scheme}://{service_hostname}:{port}"
+        return f"{scheme}://{service_hostname}:{NGINX_PORT}"
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -293,23 +285,23 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def _charm_mesh_policies(self) -> List[Union[AppPolicy, UnitPolicy]]:
         """Return the mesh policies specific to Mimir."""
         return [
-            # Allow access to mimir API ports for charms related over the receive-remote-write relation.
+            # Allow access to mimir API port for charms related over the receive-remote-write relation.
             # This is a unit policy as mimir's unit address is published for receiving metrics.
             UnitPolicy(
                 relation="receive-remote-write",
-                ports=[NGINX_PORT, NGINX_TLS_PORT],
+                ports=[NGINX_PORT],
             ),
-            # Allow access to mimir API ports for charms related over the grafana-source relation.
+            # Allow access to the mimir API port for charms related over the grafana-source relation.
             # This is a unit policy as mimir's unit address is published for querying metrics.
             UnitPolicy(
                 relation="grafana-source",
-                ports=[NGINX_PORT, NGINX_TLS_PORT],
+                ports=[NGINX_PORT],
             ),
-            # Allow access to mimir API ports for charms related over the prometheus-api relation.
+            # Allow access to the mimir API port for charms related over the prometheus-api relation.
             # This is a unit policy as mimir's unit address is published for querying via Prometheus API.
             UnitPolicy(
                 relation="prometheus-api",
-                ports=[NGINX_PORT, NGINX_TLS_PORT],
+                ports=[NGINX_PORT],
             ),
         ]
 
@@ -318,7 +310,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         """Get the http and https ports for proxying worker telemetry."""
         return WorkerTelemetryProxyConfig(
             http_port=NGINX_PORT,
-            https_port=NGINX_TLS_PORT,
+            https_port=NGINX_PORT,
         )
 
     ###########################
@@ -478,33 +470,8 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         if not is_valid_timespec(self.retention_period):
             logger.info(f"Suspending data deletion due to invalid option set in config: {self.retention_period}. To resume data deletion, please reset value to a valid option.")
             event.add_status(BlockedStatus(f"Invalid config option (see debug-log): retention_period={self.retention_period}"))
-        if self._has_alert_rule_errors():
+        if self.remote_write_provider.has_invalid_alert_rules():
             event.add_status(BlockedStatus("Invalid alert rules. See debug-log"))
-
-    def _has_alert_rule_errors(self) -> bool:
-        """Check if any remote-write relation reported validation errors."""
-        if not self.unit.is_leader():
-            return False
-        for relation in self.model.relations.get(REMOTE_WRITE_RELATION_NAME, []):
-            app_data = relation.data.get(self.app)
-            if not app_data:
-                continue
-
-            event_raw = app_data.get("event", "{}")
-            try:
-                event_data = json.loads(event_raw)
-            except (json.JSONDecodeError, TypeError):
-                continue
-
-            if event_data.get("errors"):
-                logger.error(
-                    "Alert rule validation error on relation %s: %s",
-                    relation.id,
-                    event_data["errors"],
-                )
-                return True
-
-        return False
 
     def _reconcile(self):
         # This method contains unconditional update logic, i.e. logic that should be executed
@@ -520,8 +487,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self.remote_write_provider.update_endpoint()
 
         # Open necessary service ports. needed for telemetry proxying.
-        nginx_port = NGINX_TLS_PORT if self.coordinator.tls_available else NGINX_PORT
-        self.unit.set_ports(nginx_port)
+        self.unit.set_ports(NGINX_PORT)
 
         # Re-publish ingress requirements so scheme/port reflect current TLS state.
         # The scheme lambda is evaluated at publish time, so after the Coordinator's reconcile

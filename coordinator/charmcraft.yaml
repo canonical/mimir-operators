@@ -216,11 +216,18 @@ config:
         Otherwise, the value is set to the greater of the setpoint or 100,000.
         Ref: https://grafana.com/docs/mimir/latest/manage/use-exemplars/store-exemplars/
       type: int
+    ingestion_rate:
+      default: 100000
+      description: |
+        Per-tenant ingestion rate limit in samples per second. 0 to disable.
+        Negative values are clamped to 0.
+        The ingestion burst size is automatically set to 20x this value.
+        CLI flag: -distributor.ingestion-rate-limit
+      type: int
     metrics_retention_period:
-      default: "0"
+      default: "15d"
       description: |
         Sets a global retention period for metrics in Mimir. Supported units: d, w, m, y, h, s, ms or 0 for no limit (disable)
         When this value is set to an invalid value (e.g. "1week"), the charm will be blocked along with a relevant message.
-        To avoid data loss, the retention period will be set to the default of 0 in the worker config, effectively disabling data deletion.
       type: string
 

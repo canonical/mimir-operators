@@ -3,12 +3,11 @@
 """Nginx workload."""
 
 import logging
-from typing import Dict, List
+from typing import Dict, Final, List
 
 from charmlibs.nginx_k8s import (
     NginxLocationConfig,
     NginxUpstream,
-    TLSConfigManager,
 )
 from ops import Container
 
@@ -51,31 +50,21 @@ class NginxHelper:
         NginxLocationConfig(path="/api/v1/upload/block/", backend="compactor", modifier="="),
     ]
 
-    _port = 8080
-    _tls_port = 443
+    port: Final[int] = 8080
 
     def __init__(self, container: Container):
         self._container = container
 
     def upstreams(self) -> List[NginxUpstream]:
         """Generate the list of Nginx upstream metadata configurations."""
-        return [NginxUpstream(role.value, self._port, role.value) for role in MimirRole]
+        return [NginxUpstream(role.value, self.port, role.value) for role in MimirRole]
 
     def server_ports_to_locations(self) -> Dict[int, List[NginxLocationConfig]]:
         """Generate a mapping from server ports to a list of Nginx location configurations."""
         return {
-            self._tls_port if self._tls_available else self._port: self._locations_distributor
+            self.port: self._locations_distributor
             + self._locations_ruler
             + self._locations_alertmanager
             + self._locations_query_frontend
             + self._locations_compactor
         }
-
-    @property
-    def _tls_available(self) -> bool:
-        return (
-            self._container.can_connect()
-            and self._container.exists(TLSConfigManager.CERT_PATH)
-            and self._container.exists(TLSConfigManager.KEY_PATH)
-            and self._container.exists(TLSConfigManager.CA_CERT_PATH)
-        )
