@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from charmlibs.nginx_k8s import NginxConfig
@@ -17,11 +17,10 @@ def mock_ipv6(enable: bool):
 def nginx_config():
     def _nginx_config(tls=False, ipv6=True):
         with mock_ipv6(ipv6):
-            with patch.object(NginxHelper, "_tls_available", new=PropertyMock(return_value=tls)):
-                nginx_helper = NginxHelper(MagicMock())
-                return NginxConfig(server_name="localhost",
-                                    upstream_configs=nginx_helper.upstreams(),
-                                    server_ports_to_locations=nginx_helper.server_ports_to_locations())
+            nginx_helper = NginxHelper(MagicMock())
+            return NginxConfig(server_name="localhost",
+                                upstream_configs=nginx_helper.upstreams(),
+                                server_ports_to_locations=nginx_helper.server_ports_to_locations())
     return _nginx_config
 
 
@@ -92,9 +91,9 @@ def test_servers_config(ipv6, tls, nginx_config):
     server_config = nginx_config(tls=tls, ipv6=ipv6).get_config(
         {"distributor": ["address.one"]}, tls
     )
-    ipv4_args = "443 ssl" if tls else f"{port}"
+    ipv4_args = f"{port} ssl" if tls else f"{port}"
     assert f"listen {ipv4_args}" in  server_config
-    ipv6_args = "[::]:443 ssl" if tls else f"[::]:{port}"
+    ipv6_args = f"[::]:{port} ssl" if tls else f"[::]:{port}"
     if ipv6:
         assert f"listen {ipv6_args}" in server_config
     else:

@@ -9,7 +9,7 @@ import pytest
 from ops import ActiveStatus
 from scenario import Container, Context, Exec, Relation
 
-from charm import NGINX_PORT, NGINX_TLS_PORT, MimirCoordinatorK8SOperatorCharm
+from charm import NGINX_PORT, MimirCoordinatorK8SOperatorCharm
 
 
 @pytest.fixture
@@ -37,8 +37,9 @@ def context(mimir_charm):
 
 @pytest.fixture(scope="function")
 def nginx_container():
-    address_arg = f"--address=http://{socket.getfqdn()}:{NGINX_PORT}"
-    address_arg_tls = f"--address=https://{socket.getfqdn()}:{NGINX_TLS_PORT}"
+    address_arg, address_arg_tls = (
+        f"--address={scheme}://{socket.getfqdn()}:{NGINX_PORT}" for scheme in ("http", "https")
+    )
     return Container(
         "nginx",
         can_connect=True,

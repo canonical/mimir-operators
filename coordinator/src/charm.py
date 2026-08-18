@@ -51,8 +51,7 @@ logger = logging.getLogger(__name__)
 
 RULES_DIR = "/etc/mimir-alerts/rules"
 ALERTS_HASH_PATH = "/etc/mimir-alerts/alerts.sha256"
-NGINX_PORT = NginxHelper._port
-NGINX_TLS_PORT = NginxHelper._tls_port
+NGINX_PORT = NginxHelper.port
 
 
 # 60s is expected to be the longest scrape interval in most deployments,
@@ -196,11 +195,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def internal_url(self) -> str:
         """Returns workload's FQDN. Used for ingress."""
         scheme = "http"
-        port = NGINX_PORT
         if hasattr(self, "coordinator") and self.coordinator.nginx.are_certificates_on_disk:
             scheme = "https"
-            port = NGINX_TLS_PORT
-        return f"{scheme}://{self.hostname}:{port}"
+        return f"{scheme}://{self.hostname}:{NGINX_PORT}"
 
     @property
     def external_url(self) -> Optional[str]:
@@ -230,16 +227,14 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def _service_url(self) -> str:
         """Return the K8s service URL (without unit prefix) for app-level datasources."""
         scheme = "http"
-        port = NGINX_PORT
         if hasattr(self, "coordinator") and self.coordinator.nginx.are_certificates_on_disk:
             scheme = "https"
-            port = NGINX_TLS_PORT
 
         # We use the ClusterIP service, not the headless service to avoid https://github.com/canonical/mimir-operators/issues/232.
         service_hostname = self.coordinator.app_hostname(
             self.hostname, self.app.name, self.model.name
         )
-        return f"{scheme}://{service_hostname}:{port}"
+        return f"{scheme}://{service_hostname}:{NGINX_PORT}"
 
     @property
     def _catalogue_item(self) -> CatalogueItem:
@@ -281,23 +276,23 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def _charm_mesh_policies(self) -> List[Union[AppPolicy, UnitPolicy]]:
         """Return the mesh policies specific to Mimir."""
         return [
-            # Allow access to mimir API ports for charms related over the receive-remote-write relation.
+            # Allow access to mimir API port for charms related over the receive-remote-write relation.
             # This is a unit policy as mimir's unit address is published for receiving metrics.
             UnitPolicy(
                 relation="receive-remote-write",
-                ports=[NGINX_PORT, NGINX_TLS_PORT],
+                ports=[NGINX_PORT],
             ),
-            # Allow access to mimir API ports for charms related over the grafana-source relation.
+            # Allow access to the mimir API port for charms related over the grafana-source relation.
             # This is a unit policy as mimir's unit address is published for querying metrics.
             UnitPolicy(
                 relation="grafana-source",
-                ports=[NGINX_PORT, NGINX_TLS_PORT],
+                ports=[NGINX_PORT],
             ),
-            # Allow access to mimir API ports for charms related over the prometheus-api relation.
+            # Allow access to the mimir API port for charms related over the prometheus-api relation.
             # This is a unit policy as mimir's unit address is published for querying via Prometheus API.
             UnitPolicy(
                 relation="prometheus-api",
-                ports=[NGINX_PORT, NGINX_TLS_PORT],
+                ports=[NGINX_PORT],
             ),
         ]
 
@@ -306,7 +301,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         """Get the http and https ports for proxying worker telemetry."""
         return WorkerTelemetryProxyConfig(
             http_port=NGINX_PORT,
-            https_port=NGINX_TLS_PORT,
+            https_port=NGINX_PORT,
         )
 
     ###########################
@@ -483,8 +478,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self.remote_write_provider.update_endpoint()
 
         # Open necessary service ports. needed for telemetry proxying.
-        nginx_port = NGINX_TLS_PORT if self.coordinator.tls_available else NGINX_PORT
-        self.unit.set_ports(nginx_port)
+        self.unit.set_ports(NGINX_PORT)
 
 
     def _build_grafana_source_extra_fields(self) -> Dict[str, Any]:
