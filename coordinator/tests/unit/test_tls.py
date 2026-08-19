@@ -18,7 +18,7 @@ def test_ingress_tls(
     nginx_container,
     nginx_prometheus_exporter_container,
 ):
-    # GIVEN Loki is related over the ingress and certificates endpoints
+    # GIVEN Mimir is related over the ingress and certificates endpoints
     ingress = Relation("ingress")
     certificates = Relation("certificates")
 
@@ -42,7 +42,7 @@ def test_ingress_tls(
         # THEN there are no certificates on disk
         assert not charm.coordinator.nginx.are_certificates_on_disk
 
-        # AND Loki publishes its Nginx non-TLS port in the ingress databag
+        # AND Mimir publishes its Nginx port in the ingress databag
         assert get_relation_data(state_out.relations, "ingress", "port") == str(NGINX_PORT)
 
     # AND WHEN TLS is enabled
@@ -50,7 +50,7 @@ def test_ingress_tls(
         # AND the ingress databag is updated
         state_out = context.run(context.on.relation_changed(ingress), state_in)
 
-        # THEN Loki publishes its Nginx TLS scheme in the ingress databag (port stays the same)
+        # THEN Mimir publishes its Nginx TLS scheme in the ingress databag (port stays the same)
         assert get_relation_data(state_out.relations, "ingress", "scheme") == '"https"'
         assert get_relation_data(state_out.relations, "ingress", "port") == str(NGINX_PORT)
 
@@ -101,3 +101,44 @@ def test_rules_sync_command_adds_tls_ca_path_over_https(
 
     # THEN mimirtool is told to verify against Mimir's CA bundle (otelcol-operator#328)
     assert any(arg.startswith("--tls-ca-path=") for arg in command)
+
+def test_ingress_scheme_switches_to_http_when_certificates_relation_removed(
+    context,
+    s3,
+    all_worker,
+    nginx_container,
+    nginx_prometheus_exporter_container,
+):
+    ingress = Relation("ingress")
+    certificates = Relation("certificates")
+
+    state = State(
+        relations=[
+            s3,
+            all_worker,
+            ingress,
+            certificates,
+        ],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+    )
+
+    # GIVEN TLS is available
+    with patch.object(Nginx, "are_certificates_on_disk", new=True):
+        state = context.run(context.on.relation_joined(ingress), state)
+
+        # THEN ingress databag shows https scheme and TLS port
+        assert get_relation_data(state.relations, "ingress", "scheme") == '"https"'
+        assert get_relation_data(state.relations, "ingress", "port") == str(NGINX_PORT)
+
+    # WHEN the certificates relation is removed
+    state = context.run(
+        context.on.relation_broken(state.get_relation(certificates.id)),
+        state,
+    )
+
+    # THEN the ingress databag is still the same as before
+    assert get_relation_data(state.relations, "ingress", "port") == str(NGINX_PORT)
+    # AND scheme is either "http" or absent (defaults to "http" when excluded from dump)
+    scheme = get_relation_data(state.relations, "ingress", "scheme")
+    assert scheme is None or scheme == '"http"', f"Expected http or absent, got {scheme}"
