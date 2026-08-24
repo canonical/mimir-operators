@@ -7,7 +7,7 @@
 import logging
 from enum import Enum, unique
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 
 import yaml
@@ -15,6 +15,7 @@ from coordinated_workers.coordinator import ClusterRolesConfig, Coordinator
 from coordinated_workers.interfaces.cluster import ClusterProvider
 from coordinated_workers.worker import CERT_FILE, CLIENT_CA_FILE, KEY_FILE
 from cosl import JujuTopology
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,172 @@ MIMIR_GRPC_LISTEN_PORT = 9095
 # Please visit https://grafana.com/docs/mimir/latest/manage/use-exemplars/store-exemplars/ for more info.
 EXEMPLARS_FLOOR = 100000
 
+
+class ShardingRing(BaseModel):
+    """Ring replication settings."""
+
+    replication_factor: int
+
+
+class Filesystem(BaseModel):
+    """Local filesystem storage."""
+
+    dir: str
+
+
+class CommonStorage(BaseModel):
+    """Shared object-storage settings."""
+
+    backend: str
+    # Pass through coordinator S3 keys as-is (names differ by provider/track).
+    s3: Dict[str, Any]
+
+
+class Common(BaseModel):
+    """Common Mimir section."""
+
+    storage: Optional[CommonStorage] = None
+
+
+class Alertmanager(BaseModel):
+    """Alertmanager schema."""
+
+    data_dir: str
+    sharding_ring: ShardingRing
+
+
+class Compactor(BaseModel):
+    """Compactor schema."""
+
+    data_dir: str
+
+
+class Frontend(BaseModel):
+    """Query-frontend schema."""
+
+    scheduler_address: Optional[str] = None
+
+
+class FrontendWorker(BaseModel):
+    """Querier frontend_worker schema."""
+
+    scheduler_address: Optional[str] = None
+    frontend_address: Optional[str] = None
+
+
+class IngesterRing(BaseModel):
+    """Ingester ring schema."""
+
+    replication_factor: int
+
+
+class Ingester(BaseModel):
+    """Ingester schema."""
+
+    ring: IngesterRing
+
+
+class Ruler(BaseModel):
+    """Ruler schema."""
+
+    rule_path: str
+    alertmanager_url: str
+
+
+class ComponentStorage(BaseModel):
+    """Filesystem or S3-prefixed storage for a Mimir component."""
+
+    filesystem: Optional[Filesystem] = None
+    storage_prefix: Optional[str] = None
+
+
+class StoreGateway(BaseModel):
+    """Store-gateway schema."""
+
+    sharding_ring: ShardingRing
+
+
+class BucketStore(BaseModel):
+    """Blocks bucket-store schema."""
+
+    sync_dir: str
+
+
+class Tsdb(BaseModel):
+    """Ingester TSDB schema."""
+
+    dir: str
+
+
+class BlocksStorage(BaseModel):
+    """Blocks storage schema."""
+
+    bucket_store: Optional[BucketStore] = None
+    filesystem: Optional[Filesystem] = None
+    tsdb: Optional[Tsdb] = None
+    storage_prefix: Optional[str] = None
+
+
+class Memberlist(BaseModel):
+    """Memberlist schema."""
+
+    cluster_label: str
+    join_members: List[str]
+
+
+class Limits(BaseModel):
+    """Limits schema."""
+
+    ruler_max_rules_per_rule_group: int
+    ruler_max_rule_groups_per_tenant: int
+    max_global_series_per_user: int
+    ingestion_rate: int
+    ingestion_burst_size: int
+    max_global_exemplars_per_user: int
+    # Charm emits 0 as int, or a duration string such as "1w".
+    compactor_blocks_retention_period: Union[int, str]
+
+
+class HttpTlsConfig(BaseModel):
+    """HTTP TLS schema."""
+
+    cert_file: str
+    key_file: str
+    client_ca_file: str
+    client_auth_type: str
+
+
+class Server(BaseModel):
+    """Server schema."""
+
+    http_tls_config: HttpTlsConfig
+
+
+class MimirConfigModel(BaseModel):
+    """Minimal Mimir config schema for fields this charm emits.
+
+    Unknown keys are ignored so upgrade paths (e.g. 2.17 -> dev) do not fail
+    when a newer track adds a field this model does not know about.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    common: Common = Field(default_factory=Common)
+    alertmanager: Alertmanager
+    alertmanager_storage: ComponentStorage
+    compactor: Compactor
+    frontend: Frontend = Field(default_factory=Frontend)
+    frontend_worker: FrontendWorker = Field(default_factory=FrontendWorker)
+    ingester: Ingester
+    ruler: Ruler
+    ruler_storage: ComponentStorage
+    store_gateway: StoreGateway
+    blocks_storage: BlocksStorage
+    memberlist: Memberlist
+    limits: Limits
+    server: Optional[Server] = None
+
+
 class MimirConfig:
     """Config builder for the Mimir Coordinator."""
 
@@ -156,7 +323,8 @@ class MimirConfig:
         if coordinator.nginx.are_certificates_on_disk:
             mimir_config["server"] = self._build_tls_config()
 
-        return yaml.dump(mimir_config)
+        validated = MimirConfigModel.model_validate(mimir_config)
+        return yaml.dump(validated.model_dump(mode="json", by_alias=True, exclude_none=True))
 
     def _build_tls_config(self) -> Dict[str, Any]:
         tls_config = {
