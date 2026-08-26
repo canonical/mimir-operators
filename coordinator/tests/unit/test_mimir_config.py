@@ -2,9 +2,11 @@ import unittest
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 from deepdiff import DeepDiff
+from pydantic import ValidationError
 
-from src.mimir_config import MimirConfig
+from src.mimir_config import Alertmanager, MimirConfig, MimirConfigModel
 
 
 @pytest.fixture(scope="module")
@@ -363,6 +365,69 @@ def test_retention_period_logic(mimir_config, retention_period_config, expected_
 
     # Assert that the value for compactor_blocks_retention_period matches the expected value
     assert limits_config["compactor_blocks_retention_period"] == expected_value
+
+
+def _load_built_config(mimir_config, coordinator):
+    return yaml.safe_load(mimir_config.config(coordinator))
+
+
+def test_config_round_trip_without_s3_or_tls(mimir_config, coordinator):
+    coordinator.s3_ready = False
+    coordinator.nginx.are_certificates_on_disk = False
+
+    raw = _load_built_config(mimir_config, coordinator)
+    parsed = MimirConfigModel.model_validate(raw)
+
+    assert parsed.common.storage is None
+    assert parsed.server is None
+    assert "server" not in raw
+    assert raw["common"] == {}
+
+
+def test_config_model_ignores_unknown_fields(mimir_config, coordinator):
+    coordinator.s3_ready = False
+    coordinator.nginx.are_certificates_on_disk = False
+
+    raw = _load_built_config(mimir_config, coordinator)
+    raw["not_a_real_mimir_key"] = 1
+    raw["limits"]["also_unknown"] = True
+
+    parsed = MimirConfigModel.model_validate(raw)
+    dumped = parsed.model_dump(exclude_none=True)
+    assert "not_a_real_mimir_key" not in dumped
+    assert "also_unknown" not in dumped["limits"]
+
+
+def test_config_with_s3_and_tls_validates(mimir_config, coordinator):
+    coordinator.s3_ready = True
+    coordinator.nginx.are_certificates_on_disk = True
+    coordinator._s3_config = {
+        "endpoint": "s3.com:port",
+        "access_key_id": "your_access_key",
+        "secret_access_key": "your_secret_key",
+        "bucket_name": "your_bucket",
+        "region": "your_region",
+        "insecure": "true",
+    }
+
+    raw = _load_built_config(mimir_config, coordinator)
+    parsed = MimirConfigModel.model_validate(raw)
+
+    assert parsed.common.storage is not None
+    assert parsed.common.storage.backend == "s3"
+    assert parsed.server is not None
+    assert parsed.blocks_storage.storage_prefix == "blocks"
+    assert parsed.blocks_storage.filesystem is None
+    assert parsed.ruler_storage.storage_prefix == "rules"
+    assert parsed.alertmanager_storage.storage_prefix == "alerts"
+
+
+def test_config_model_rejects_invalid_types():
+    with pytest.raises(ValidationError):
+        Alertmanager.model_validate(
+            {"data_dir": "/data/data-alertmanager", "sharding_ring": {"replication_factor": "nope"}}
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
