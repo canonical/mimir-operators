@@ -442,6 +442,28 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             ingress_url=f"{self.external_url}/prometheus" if self.external_url else None,
         )
 
+    def _update_grafana_sources(self) -> None:
+        """Publish the anonymous Mimir datasource plus one per announced tenant."""
+        if not self.unit.is_leader():
+            return
+
+        base_url = f"{self.external_url or self._service_url}/prometheus"
+        extra_fields = self._build_grafana_source_extra_fields()
+        tenant_datasources = [
+            {
+                "source_name": f"mimir-tenant-{tenant}",
+                "source_type": "prometheus",
+                "url": base_url,
+                "extra_fields": extra_fields,
+                "secure_extra_fields": {"httpHeaderValue1": tenant},
+            }
+            for tenant in sorted(set(self.remote_write_provider.mimir_tenant_ids))
+        ]
+        self.grafana_source.update_app_datasources(
+            tenant_datasources,
+            app_datasource_url=base_url,
+        )
+
     def _update_datasource_exchange(self) -> None:
         """Update the grafana-datasource-exchange relations."""
         if not self.unit.is_leader():
@@ -481,9 +503,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self._ensure_mimirtool()
         self._update_prometheus_api()
         self._update_datasource_exchange()
-        self.grafana_source.update_app_source(
-            app_datasource_url=f"{self.external_url or self._service_url}/prometheus"
-        )
+        self._update_grafana_sources()
         self.remote_write_provider.update_endpoint()
 
         # Open necessary service ports. needed for telemetry proxying.
