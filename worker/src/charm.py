@@ -114,7 +114,7 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
                     "mimir": {
                         "override": "replace",
                         "summary": "mimir worker daemon",
-                        "command": f"/bin/mimir --config.file={CONFIG_FILE} -target {targets} -auth.multitenancy-enabled=false",
+                        "command": f"/bin/mimir --config.file={CONFIG_FILE} -target {targets}",
                         "startup": "enabled",
                         "environment": env,
                     }
