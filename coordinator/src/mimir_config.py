@@ -254,7 +254,7 @@ class MimirConfig:
     # microservices mode.
     def _build_ingester_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
         ingester_scale = len(cluster.gather_addresses_by_role().get("ingester", []))
-        config = {
+        config: Dict[str, Any] = {
             "ring": {
                 "replication_factor": (
                     1 if ingester_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
