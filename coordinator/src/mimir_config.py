@@ -114,6 +114,7 @@ class MimirConfig:
         recovery_data_dir: Path = Path("/recovery-data"),
         metrics_retention_period: Optional[str] = None,
         ingestion_rate: Optional[int] = None,
+        out_of_order_time_window: Optional[str] = None,
     ):
         self._alertmanager_urls = alertmanager_urls
         self._root_data_dir = root_data_dir
@@ -122,6 +123,7 @@ class MimirConfig:
         self._topology = topology
         self._metrics_retention_period: str = metrics_retention_period or "0"
         self._ingestion_rate = ingestion_rate
+        self._out_of_order_time_window = out_of_order_time_window
 
     def config(self, coordinator: Coordinator) -> str:
         """Generate shared config file for mimir.
@@ -252,13 +254,16 @@ class MimirConfig:
     # microservices mode.
     def _build_ingester_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
         ingester_scale = len(cluster.gather_addresses_by_role().get("ingester", []))
-        return {
+        config = {
             "ring": {
                 "replication_factor": (
                     1 if ingester_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
                 )
             }
         }
+        if self._out_of_order_time_window and self._out_of_order_time_window != "0s":
+            config["out_of_order_time_window"] = self._out_of_order_time_window
+        return config
 
     # rule_path:
     # Directory to store temporary rule files loaded by the Prometheus rule managers.

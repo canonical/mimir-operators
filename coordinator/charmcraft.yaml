@@ -230,4 +230,11 @@ config:
         Sets a global retention period for metrics in Mimir. Supported units: d, w, m, y, h, s, ms or 0 for no limit (disable)
         When this value is set to an invalid value (e.g. "1week"), the charm will be blocked along with a relevant message.
       type: string
+    out_of_order_time_window:
+      default: "0s"
+      description: |
+        The time window within which out-of-order samples are accepted for ingestion.
+        A value of "0s" disables out-of-order ingestion (default).
+        CLI flag: -ingester.out-of-order-time-window
+      type: string
 
