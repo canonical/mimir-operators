@@ -254,13 +254,11 @@ def test_build_ingester_config(mimir_config, coordinator, addresses_by_role, rep
 )
 def test_out_of_order_time_window(topology, time_window, expected_key_present, expected_value):
     cfg = MimirConfig(topology=topology, out_of_order_time_window=time_window)
-    coordinator = MagicMock()
-    coordinator.cluster.gather_addresses_by_role.return_value = {"ingester": ["address.one"]}
-    ingester_config = cfg._build_ingester_config(coordinator.cluster)
+    limits_config = cfg._build_limits_config()
     if expected_key_present:
-        assert ingester_config["out_of_order_time_window"] == expected_value
+        assert limits_config["out_of_order_time_window"] == expected_value
     else:
-        assert "out_of_order_time_window" not in ingester_config
+        assert "out_of_order_time_window" not in limits_config
 
 
 def test_build_ruler_config(mimir_config):

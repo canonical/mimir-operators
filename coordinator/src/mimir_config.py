@@ -254,16 +254,13 @@ class MimirConfig:
     # microservices mode.
     def _build_ingester_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
         ingester_scale = len(cluster.gather_addresses_by_role().get("ingester", []))
-        config: Dict[str, Any] = {
+        return {
             "ring": {
                 "replication_factor": (
                     1 if ingester_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
                 )
             }
         }
-        if self._out_of_order_time_window and self._out_of_order_time_window != "0s":
-            config["out_of_order_time_window"] = self._out_of_order_time_window
-        return config
 
     # rule_path:
     # Directory to store temporary rule files loaded by the Prometheus rule managers.
@@ -403,6 +400,9 @@ class MimirConfig:
         # And not compactor_blocks_retention_period: '0'. Both are valid, but the Grafana docs use 0 (https://grafana.com/docs/mimir/latest/configure/configure-metrics-storage-retention/).
         # This is for consistency.
         limits_config["compactor_blocks_retention_period"] = 0 if self._metrics_retention_period == "0" else self._metrics_retention_period
+
+        if self._out_of_order_time_window and self._out_of_order_time_window != "0s":
+            limits_config["out_of_order_time_window"] = self._out_of_order_time_window
 
         return limits_config
 
