@@ -238,5 +238,6 @@ config:
         A value of "0s" disables out-of-order ingestion (default).
         See https://grafana.com/docs/mimir/latest/configure/configure-out-of-order-samples-ingestion/#configure-out-of-order-samples-ingestion
         CLI flag: -ingester.out-of-order-time-window
+        Note: enabling out-of-order ingestion may impact CPU usage.
       type: string
 
