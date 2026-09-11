@@ -246,7 +246,8 @@ def test_build_ingester_config(mimir_config, coordinator, addresses_by_role, rep
     "time_window, expected_key_present, expected_value",
     [
         (None, False, None),
-        ("0s", False, None),
+        ("0s", True, "0s"),
+        ("0m", True, "0m"),
         ("10m", True, "10m"),
         ("1h", True, "1h"),
         ("30m", True, "30m"),

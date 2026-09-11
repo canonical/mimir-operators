@@ -401,7 +401,7 @@ class MimirConfig:
         # This is for consistency.
         limits_config["compactor_blocks_retention_period"] = 0 if self._metrics_retention_period == "0" else self._metrics_retention_period
 
-        if self._out_of_order_time_window and self._out_of_order_time_window != "0s":
+        if self._out_of_order_time_window is not None:
             limits_config["out_of_order_time_window"] = self._out_of_order_time_window
 
         return limits_config

@@ -234,8 +234,9 @@ config:
       default: "0s"
       description: |
         The time window within which out-of-order samples are accepted for ingestion.
-        Supported units: d, w, m, y, h, s, ms or 0s to disable
-        A value of "0s" disables out-of-order ingestion (default).
+        Supported units: s, m, h (Prometheus duration format; "m" is minutes).
+        Set to "0s" to disable (default).
+        NOTE: This is an experimental feature in Mimir 2.17+.
         See https://grafana.com/docs/mimir/latest/configure/configure-out-of-order-samples-ingestion/#configure-out-of-order-samples-ingestion
         CLI flag: -ingester.out-of-order-time-window
         Note: enabling out-of-order ingestion may impact CPU usage.
