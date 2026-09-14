@@ -103,6 +103,36 @@ def test_config_retention_period(context, s3, all_worker, nginx_container, nginx
         assert isinstance(state_out.unit_status, expected_status)
 
 
+@pytest.mark.parametrize(
+    "set_config, expected_status",
+    [
+        ("5m", ActiveStatus),
+        ("1h", ActiveStatus),
+        ("30s", ActiveStatus),
+        ("0s", ActiveStatus),
+        ("5min", BlockedStatus),
+        ("banana", BlockedStatus),
+    ]
+)
+def test_config_out_of_order_time_window(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container, set_config, expected_status):
+    """Ensure the out_of_order_time_window config is validated and set correctly."""
+    config = {"out_of_order_time_window": set_config}
+
+    state_in = State(
+        relations=[
+            s3,
+            all_worker,
+        ],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+        config=config
+    )
+
+    with context(context.on.relation_joined(all_worker), state_in) as mgr:
+        state_out = mgr.run()
+        assert isinstance(state_out.unit_status, expected_status)
+
+
 def test_alerts_hash_not_written_on_mimirtool_failure(
     context,
     s3,

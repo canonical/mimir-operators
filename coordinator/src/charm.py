@@ -84,6 +84,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         )
         self.alertmanager = AlertmanagerConsumer(charm=self, relation_name="alertmanager")
         self.retention_period = str(self.config['metrics_retention_period'])
+        self.out_of_order_time_window = str(self.config["out_of_order_time_window"])
         self.coordinator = Coordinator(
             charm=self,
             roles_config=MIMIR_ROLES_CONFIG,
@@ -118,6 +119,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 max_global_exemplars_per_user=int(self.config["max_global_exemplars_per_user"]),
                 metrics_retention_period=self.retention_period if is_valid_timespec(self.retention_period) else None,
                 ingestion_rate=max(0, int(self.config["ingestion_rate"])),
+                out_of_order_time_window=self.out_of_order_time_window if is_valid_timespec(self.out_of_order_time_window) else None,
             ).config,
             worker_ports=lambda _: tuple({8080, 9095}),
             resources_requests=self.get_resource_requests,
@@ -470,6 +472,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         if not is_valid_timespec(self.retention_period):
             logger.info(f"Suspending data deletion due to invalid option set in config: {self.retention_period}. To resume data deletion, please reset value to a valid option.")
             event.add_status(BlockedStatus(f"Invalid config option (see debug-log): retention_period={self.retention_period}"))
+        if not is_valid_timespec(self.out_of_order_time_window):
+            logger.info(f"Suspending out-of-order ingestion due to invalid option set in config: {self.out_of_order_time_window}. To resume out-of-order ingestion, please reset value to a valid option.")
+            event.add_status(BlockedStatus(f"Invalid config option (see debug-log): out_of_order_time_window={self.out_of_order_time_window}"))
         if self._has_alert_rule_errors():
             event.add_status(BlockedStatus("Invalid alert rules. See debug-log"))
 
