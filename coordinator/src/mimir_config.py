@@ -114,6 +114,7 @@ class MimirConfig:
         recovery_data_dir: Path = Path("/recovery-data"),
         metrics_retention_period: Optional[str] = None,
         ingestion_rate: Optional[int] = None,
+        out_of_order_time_window: Optional[str] = None,
     ):
         self._alertmanager_urls = alertmanager_urls
         self._root_data_dir = root_data_dir
@@ -122,6 +123,7 @@ class MimirConfig:
         self._topology = topology
         self._metrics_retention_period: str = metrics_retention_period or "0"
         self._ingestion_rate = ingestion_rate
+        self._out_of_order_time_window = out_of_order_time_window
 
     def config(self, coordinator: Coordinator) -> str:
         """Generate shared config file for mimir.
@@ -398,6 +400,9 @@ class MimirConfig:
         # And not compactor_blocks_retention_period: '0'. Both are valid, but the Grafana docs use 0 (https://grafana.com/docs/mimir/latest/configure/configure-metrics-storage-retention/).
         # This is for consistency.
         limits_config["compactor_blocks_retention_period"] = 0 if self._metrics_retention_period == "0" else self._metrics_retention_period
+
+        if self._out_of_order_time_window is not None:
+            limits_config["out_of_order_time_window"] = self._out_of_order_time_window
 
         return limits_config
 
