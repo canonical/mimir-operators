@@ -242,6 +242,26 @@ def test_build_ingester_config(mimir_config, coordinator, addresses_by_role, rep
     assert ingester_config == expected_config
 
 
+@pytest.mark.parametrize(
+    "time_window, expected_key_present, expected_value",
+    [
+        (None, False, None),
+        ("0s", True, "0s"),
+        ("0m", True, "0m"),
+        ("10m", True, "10m"),
+        ("1h", True, "1h"),
+        ("30m", True, "30m"),
+    ],
+)
+def test_out_of_order_time_window(topology, time_window, expected_key_present, expected_value):
+    cfg = MimirConfig(topology=topology, out_of_order_time_window=time_window)
+    limits_config = cfg._build_limits_config()
+    if expected_key_present:
+        assert limits_config["out_of_order_time_window"] == expected_value
+    else:
+        assert "out_of_order_time_window" not in limits_config
+
+
 def test_build_ruler_config(mimir_config):
     ruler_config = mimir_config._build_ruler_config()
     expected_config = {
