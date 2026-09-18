@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 from deepdiff import DeepDiff
 
 from src.mimir_config import MimirConfig
@@ -47,7 +48,14 @@ def coordinator():
     coord.cluster.gather_addresses = MagicMock(
         return_value=["http://some.mimir.worker.0:8080", "http://some.mimir.worker.1:8080"]
     )
-    coord.s3_ready = MagicMock(return_value=True)
+    coord.s3_ready = True
+    coord._s3_config = {
+        "endpoint": "http://s3.example.com:9000",
+        "access_key_id": "test-key",
+        "secret_access_key": "test-secret",
+        "bucket_name": "mimir",
+        "region": "us-east-1",
+    }
     coord.nginx = MagicMock()
     coord.nginx.are_certificates_on_disk = MagicMock(return_value=True)
     return coord
@@ -383,6 +391,22 @@ def test_retention_period_logic(mimir_config, retention_period_config, expected_
 
     # Assert that the value for compactor_blocks_retention_period matches the expected value
     assert limits_config["compactor_blocks_retention_period"] == expected_value
+
+
+def test_reporting_enabled_by_default(topology, coordinator):
+    """When reporting_enabled is True (default), no usage_stats section should appear."""
+    cfg = MimirConfig(topology=topology)
+    config_yaml = cfg.config(coordinator)
+    config_dict = yaml.safe_load(config_yaml)
+    assert "usage_stats" not in config_dict
+
+
+def test_reporting_disabled(topology, coordinator):
+    """When reporting_enabled is False, usage_stats.enabled should be False."""
+    cfg = MimirConfig(topology=topology, reporting_enabled=False)
+    config_yaml = cfg.config(coordinator)
+    config_dict = yaml.safe_load(config_yaml)
+    assert config_dict["usage_stats"] == {"enabled": False}
 
 if __name__ == "__main__":
     unittest.main()

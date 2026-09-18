@@ -115,6 +115,7 @@ class MimirConfig:
         metrics_retention_period: Optional[str] = None,
         ingestion_rate: Optional[int] = None,
         out_of_order_time_window: Optional[str] = None,
+        reporting_enabled: bool = True,
     ):
         self._alertmanager_urls = alertmanager_urls
         self._root_data_dir = root_data_dir
@@ -124,6 +125,7 @@ class MimirConfig:
         self._metrics_retention_period: str = metrics_retention_period or "0"
         self._ingestion_rate = ingestion_rate
         self._out_of_order_time_window = out_of_order_time_window
+        self._reporting_enabled = reporting_enabled
 
     def config(self, coordinator: Coordinator) -> str:
         """Generate shared config file for mimir.
@@ -157,6 +159,9 @@ class MimirConfig:
         # todo: TLS config for memberlist
         if coordinator.nginx.are_certificates_on_disk:
             mimir_config["server"] = self._build_tls_config()
+
+        if not self._reporting_enabled:
+            mimir_config["usage_stats"] = {"enabled": False}
 
         return yaml.dump(mimir_config)
 
