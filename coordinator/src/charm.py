@@ -35,7 +35,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerApp
 from coordinated_workers.coordinator import Coordinator
 from coordinated_workers.telemetry_correlation import TelemetryCorrelation
 from coordinated_workers.worker_telemetry import WorkerTelemetryProxyConfig
-from cosl import JujuTopology
+from cosl import AlertRulesCustomization, AlertRulesCustomizationError, JujuTopology
 from cosl.interfaces.datasource_exchange import DatasourceDict
 from cosl.time_validation import is_valid_timespec
 from ops import ActiveStatus, BlockedStatus
@@ -406,7 +406,16 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 hashable = hashable.encode("utf-8")
             return hashlib.sha256(hashable).hexdigest()
 
-        remote_write_alerts = self.remote_write_provider.alerts
+        # Parse and apply alert rule customizations
+        try:
+            customization = AlertRulesCustomization.from_yaml(
+                cast(str, self.model.config.get("alert_rule_customizations") or "")
+            )
+        except AlertRulesCustomizationError as e:
+            logger.error("An error occurred while parsing alert rule customizations: %s", e)
+            customization = AlertRulesCustomization()  # no-op: write rules unmodified
+
+        remote_write_alerts = customization.apply(self.remote_write_provider.alerts)
         alerts_hash = sha256(str(remote_write_alerts))
         alert_rules_changed = alerts_hash != self._pull(ALERTS_HASH_PATH)
 
@@ -476,6 +485,13 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         if not is_valid_timespec(self.out_of_order_time_window):
             logger.info(f"Suspending out-of-order ingestion due to invalid option set in config: {self.out_of_order_time_window}. To resume out-of-order ingestion, please reset value to a valid option.")
             event.add_status(BlockedStatus(f"Invalid config option (see debug-log): out_of_order_time_window={self.out_of_order_time_window}"))
+        try:
+            AlertRulesCustomization.from_yaml(
+                cast(str, self.model.config.get("alert_rule_customizations") or "")
+            )
+        except AlertRulesCustomizationError as e:
+            logger.error("Invalid alert rule customizations: %s", e)
+            event.add_status(BlockedStatus("Invalid alert rule customizations. See debug-log"))
         if self.remote_write_provider.has_invalid_alert_rules():
             event.add_status(BlockedStatus("Invalid alert rules. See debug-log"))
 
