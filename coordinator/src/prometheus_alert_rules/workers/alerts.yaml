@@ -239,7 +239,7 @@ groups:
     annotations:
       summary: Mimir discarding out-of-order or too old samples in model {{ $labels.juju_model }}
       description: >
-        App '{{ $labels.juju_application }}' is dropping out-of-order samples at
+        App '{{ $labels.juju_application }}' is dropping out-of-order or too old samples at
         {{ $value | printf "%.2f" }} samples/sec.
         To understand the cause of this error and see possible solutions, visit 
         https://documentation.ubuntu.com/observability/latest/how-to/validate-and-troubleshoot/troubleshooting/#err-mimir-sample-out-of-order-and-err-mimir-sample-timestamp-too-old.
