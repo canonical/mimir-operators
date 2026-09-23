@@ -235,6 +235,21 @@ groups:
     labels:
       component: ingester
       severity: warning
+  - alert: MimirOutOfOrderSamples
+    annotations:
+      summary: Mimir discarding out-of-order samples in model {{ $labels.juju_model }}
+      description: >
+        App '{{ $labels.juju_application }}' is dropping out-of-order samples at
+        {{ $value | printf "%.2f" }} samples/sec.
+        To understand the cause of this error and see possible solutions, visit 
+        https://documentation.ubuntu.com/observability/track-3.0/how-to/validate-and-troubleshoot/troubleshooting/#err-mimir-sample-out-of-order-and-err-mimir-sample-timestamp-too-old.
+    expr: |
+      sum by (juju_model, juju_application, reason) (
+        rate(cortex_discarded_samples_total{reason="sample-out-of-order"}[5m])
+      ) > 0
+    for: 5m
+    labels:
+      severity: warning
 - name: mimir_instance_limits_alerts
   rules:
   - alert: MimirIngesterReachingSeriesLimit
