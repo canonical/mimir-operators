@@ -242,7 +242,7 @@ groups:
         App '{{ $labels.juju_application }}' is dropping out-of-order samples at
         {{ $value | printf "%.2f" }} samples/sec.
         To understand the cause of this error and see possible solutions, visit 
-        https://documentation.ubuntu.com/observability/track-3.0/how-to/validate-and-troubleshoot/troubleshooting/#err-mimir-sample-out-of-order-and-err-mimir-sample-timestamp-too-old.
+        https://documentation.ubuntu.com/observability/latest/how-to/validate-and-troubleshoot/troubleshooting/#err-mimir-sample-out-of-order-and-err-mimir-sample-timestamp-too-old.
     expr: |
       sum by (juju_model, juju_application) (
         rate(cortex_discarded_samples_total{reason=~"sample-out-of-order|sample-timestamp-too-old"}[5m])
