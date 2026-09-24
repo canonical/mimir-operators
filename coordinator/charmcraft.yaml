@@ -252,4 +252,44 @@ config:
         Ref: https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#analytics
       type: boolean
       default: true
+    alert_rule_customizations:
+      type: string
+      description: |
+        A YAML string for customizing the alert rules that this coordinator receives from any
+        connected application via the ``receive-remote-write`` relation.
+        Two top-level operations are supported: ``remove`` and ``patch``.
+        Both are optional and can be combined freely.
+
+        **remove** — drop matching alerting rules (or entire groups).
+        Each entry requires a ``where`` selector. When a group is targeted by a
+        group-only selector, the entire group (including any recording rules) is dropped.
+        Otherwise only alerting rules are removed; recording rules are left untouched.
+
+        **patch** — merge a ``set`` block into every matching alerting rule.
+        Each entry requires both a ``where`` selector and a ``set`` block.
+        The ``set`` block may override ``alert``, ``expr``, ``for``, and/or merge into
+        ``labels`` / ``annotations`` (existing keys are overwritten; new keys are added).
+
+        **where selector fields** (AND across fields; multiple list entries are OR'd):
+          - ``alert``: exact match on the alert name
+          - ``group``: exact match on the group name
+          - ``labels``: every key-value pair must be present in the rule's labels
+          - ``annotations``: every key-value pair must be present in the rule's annotations
+
+        Example:
+
+          remove:
+            - where:
+                alert: TargetDown
+            - where:
+                labels:
+                  juju_application: noisy-exporter
+
+          patch:
+            - where:
+                alert: HighLatency
+              set:
+                for: 30m
+                labels:
+                  severity: warning
 

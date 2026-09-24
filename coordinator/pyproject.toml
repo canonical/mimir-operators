@@ -9,6 +9,8 @@ dependencies = [
   "coordinated-workers>=4.1.0",
   "charmed-service-mesh-helpers>=0.2.0",
   "lightkube-extensions",
+  "cosl@git+https://github.com/canonical/cos-lib.git@feat/rules-customization",
+  "pydantic>=2",
 ]
 
 [project.optional-dependencies]
