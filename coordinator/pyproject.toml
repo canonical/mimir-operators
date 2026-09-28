@@ -9,7 +9,7 @@ dependencies = [
   "coordinated-workers>=4.1.0",
   "charmed-service-mesh-helpers>=0.2.0",
   "lightkube-extensions",
-  "cosl@git+https://github.com/canonical/cos-lib.git@feat/rules-customization",
+  "cosl",
   "pydantic>=2",
 ]
 
@@ -22,6 +22,7 @@ dev = [
   "pyright",
   # Unit
   "pytest",
+  "pytest-bdd<8",
   "coverage[toml]",
   "deepdiff",
   # Integration

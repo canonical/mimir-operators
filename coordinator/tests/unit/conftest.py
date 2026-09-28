@@ -30,6 +30,27 @@ def mimir_charm(tmp_path):
                     yield MimirCoordinatorK8SOperatorCharm
 
 
+@pytest.fixture(autouse=True)
+def patch_cos_tool():
+    """Make CosTool find the system cos-tool binary so alert-rule validation works in tests."""
+    from pathlib import Path
+
+    from cosl.cos_tool import CosTool
+
+    cos_tool_path = Path("/usr/local/bin/cos-tool")
+    if cos_tool_path.exists():
+        # Reset the class-level cache so the mock takes effect even if a previous
+        # test already disabled the tool.
+        CosTool._path = None
+        CosTool._disabled = False
+        with patch.object(CosTool, "_get_tool_path", return_value=cos_tool_path):
+            yield
+        CosTool._path = None
+        CosTool._disabled = False
+    else:
+        yield
+
+
 @pytest.fixture(scope="function")
 def context(mimir_charm):
     return Context(charm_type=mimir_charm)
