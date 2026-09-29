@@ -32,23 +32,21 @@ def mimir_charm(tmp_path):
 
 @pytest.fixture(autouse=True)
 def patch_cos_tool():
-    """Make CosTool find the system cos-tool binary so alert-rule validation works in tests."""
-    from pathlib import Path
+    """Reset CosTool's class-level path cache before each test.
 
+    cos-tool-amd64 is downloaded into the working directory by tox before
+    running the test suite (see tox.ini [testenv:unit]).  CosTool caches its
+    lookup result in class-level attributes, so we reset them between tests to
+    ensure each test gets a fresh resolution rather than inheriting a
+    ``_disabled=True`` state left by a previous test.
+    """
     from cosl.cos_tool import CosTool
 
-    cos_tool_path = Path("/usr/local/bin/cos-tool")
-    if cos_tool_path.exists():
-        # Reset the class-level cache so the mock takes effect even if a previous
-        # test already disabled the tool.
-        CosTool._path = None
-        CosTool._disabled = False
-        with patch.object(CosTool, "_get_tool_path", return_value=cos_tool_path):
-            yield
-        CosTool._path = None
-        CosTool._disabled = False
-    else:
-        yield
+    CosTool._path = None
+    CosTool._disabled = False
+    yield
+    CosTool._path = None
+    CosTool._disabled = False
 
 
 @pytest.fixture(scope="function")
