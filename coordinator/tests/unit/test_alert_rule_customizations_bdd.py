@@ -44,7 +44,7 @@ def nginx_container():
 
 
 @given(
-    parsers.parse("the charm provides the following alert rules:\n{docstring}"),
+    "the charm provides the following alert rules",
     target_fixture="rw_relation",
 )
 def given_charm_provides_alert_rules(docstring):
@@ -70,7 +70,7 @@ def _run_config_changed(context, nginx_container, nginx_prometheus_exporter_cont
 
 
 @when(
-    parsers.parse("the customization is applied:\n{docstring}"),
+    "the customization is applied",
     target_fixture="state_out",
 )
 def when_customization_is_applied(docstring, rw_relation, context, nginx_container, nginx_prometheus_exporter_container, s3, all_worker):

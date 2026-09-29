@@ -22,7 +22,7 @@ dev = [
   "pyright",
   # Unit
   "pytest",
-  "pytest-bdd<8",
+  "pytest-bdd>=8",
   "coverage[toml]",
   "deepdiff",
   # Integration
