@@ -30,6 +30,25 @@ def mimir_charm(tmp_path):
                     yield MimirCoordinatorK8SOperatorCharm
 
 
+@pytest.fixture(autouse=True)
+def patch_cos_tool():
+    """Reset CosTool's class-level path cache before each test.
+
+    cos-tool-amd64 is downloaded into the working directory by tox before
+    running the test suite (see tox.ini [testenv:unit]).  CosTool caches its
+    lookup result in class-level attributes, so we reset them between tests to
+    ensure each test gets a fresh resolution rather than inheriting a
+    ``_disabled=True`` state left by a previous test.
+    """
+    from cosl.cos_tool import CosTool
+
+    CosTool._path = None
+    CosTool._disabled = False
+    yield
+    CosTool._path = None
+    CosTool._disabled = False
+
+
 @pytest.fixture(scope="function")
 def context(mimir_charm):
     return Context(charm_type=mimir_charm)

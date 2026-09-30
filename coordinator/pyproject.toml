@@ -9,6 +9,8 @@ dependencies = [
   "coordinated-workers>=4.1.0",
   "charmed-service-mesh-helpers>=0.2.0",
   "lightkube-extensions",
+  "cosl",
+  "pydantic>=2",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +22,7 @@ dev = [
   "pyright",
   # Unit
   "pytest",
+  "pytest-bdd>=8",
   "coverage[toml]",
   "deepdiff",
   # Integration
