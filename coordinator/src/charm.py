@@ -363,18 +363,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def _alerting_source_apps(self) -> List[str]:
         """Return the worker app names allowed to reach Alertmanager.
 
-        The `alertmanager` relation terminates at *this* coordinator, so the policy
-        auto-generator on the Alertmanager side can only derive the source principal from the
-        coordinator app (`sa/mimir`). But the alert traffic actually originates from the workers
-        (the ruler runs in the `backend` workers, `sa/mimir-backend`). We therefore discover the
-        worker app names from the cluster topology and emit a policy whose source is those
-        worker apps.
-
-        For simplicity we authorize *all* cluster worker apps via the public
-        `gather_topology()` API, rather than scoping to the ruler role. The policy stays tightly
-        scoped on the target side (Alertmanager pods, port 9093 only), so the blast radius of
-        allowing non-ruler workers is minimal. Note: `gather_topology()` is unit-derived, so a
-        worker app with no reporting units will not appear (ruler workers always have units).
+        Notes:
+         - For simplicity we authorize *all* cluster worker apps. This can be tightened in the future.
+         - `gather_topology()` is unit-derived, so a worker app with no reporting units will not appear.
         """
         return sorted(
             {unit["application"] for unit in self.coordinator.cluster.gather_topology()}
@@ -424,11 +415,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     def _reconcile_alerting_mesh_policies(self) -> None:
         """Reconcile the worker -> Alertmanager auth policies.
 
-        These cannot be expressed as a regular UnitPolicy/AppPolicy because the source
-        principal must be the cluster workers, not this coordinator (the app holding the
-        `alertmanager` relation). We therefore manage the AuthorizationPolicy directly via a
-        PolicyResourceManager, mirroring the cluster-internal policy pattern in
-        coordinated_workers.service_mesh.
+        This mirrors the cluster-internal policy pattern in coordinated_workers.service_mesh.
         """
         mesh = self.coordinator._mesh
         if not mesh:
