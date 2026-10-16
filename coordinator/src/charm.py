@@ -26,7 +26,6 @@ from charms.istio_beacon_k8s.v0.service_mesh import (
     AppPolicy,
     Endpoint,
     MeshPolicy,
-    MeshType,
     Method,
     PolicyResourceManager,
     PolicyTargetType,
@@ -39,7 +38,6 @@ from charms.mimir_coordinator_k8s.v0.prometheus_api import PrometheusApiProvider
 from charms.prometheus_k8s.v1.prometheus_remote_write import PrometheusRemoteWriteProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from coordinated_workers.coordinator import Coordinator
-from coordinated_workers.interfaces.cluster import ClusterRequirerAppData
 from coordinated_workers.telemetry_correlation import TelemetryCorrelation
 from coordinated_workers.worker_telemetry import WorkerTelemetryProxyConfig
 from cosl import (
@@ -65,12 +63,6 @@ logger = logging.getLogger(__name__)
 RULES_DIR = "/etc/mimir-alerts/rules"
 ALERTS_HASH_PATH = "/etc/mimir-alerts/alerts.sha256"
 NGINX_PORT = NginxHelper.port
-
-# The Mimir component role that dispatches alerts to Alertmanager. The `ruler` role lives in
-# the `backend` and `all` meta-roles (see src/mimir_config.py META_ROLES). We match on the
-# expanded `ruler` role so a worker deployed as `backend`, `all`, or standalone `ruler` is
-# correctly authorized, without over-broadly allowing every other worker role.
-ALERTING_SOURCE_ROLE = "ruler"
 
 # Alertmanager's HTTP API port (alertmanager-k8s _ports.api = 9093). Alerts are POSTed here.
 ALERTMANAGER_API_PORT = 9093
@@ -360,31 +352,24 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     ###################################
 
     def _alerting_source_apps(self) -> List[str]:
-        """Return the worker app names that run the ruler (i.e. send alerts to Alertmanager).
+        """Return the worker app names allowed to reach Alertmanager.
 
         The `alertmanager` relation terminates at *this* coordinator, so the policy
         auto-generator on the Alertmanager side can only derive the source principal from the
-        coordinator app (`sa/mimir`). But the alert traffic actually originates from the
-        ruler-running workers (`sa/mimir-backend`). We therefore discover the worker app names
-        from the cluster topology and emit a policy whose source is those worker apps.
+        coordinator app (`sa/mimir`). But the alert traffic actually originates from the workers
+        (the ruler runs in the `backend` workers, `sa/mimir-backend`). We therefore discover the
+        worker app names from the cluster topology and emit a policy whose source is those
+        worker apps.
 
-        We select every related worker app whose (meta-)role expands to include the `ruler`
-        role (`ALERTING_SOURCE_ROLE`), which covers `backend`, `all`, and standalone `ruler`
-        deployments.
+        For simplicity we authorize *all* cluster worker apps via the public
+        `gather_topology()` API, rather than scoping to the ruler role. The policy stays tightly
+        scoped on the target side (Alertmanager pods, port 9093 only), so the blast radius of
+        allowing non-ruler workers is minimal. Note: `gather_topology()` is unit-derived, so a
+        worker app with no reporting units will not appear (ruler workers always have units).
         """
-        cluster = self.coordinator.cluster
-        source_apps: set = set()
-        for relation in cluster._relations:
-            if not relation.app:
-                continue
-            try:
-                app_data = ClusterRequirerAppData.load(relation.data[relation.app])
-            except Exception as e:  # noqa: BLE001  (lib raises cosl DataValidationError)
-                logger.debug("Skipping cluster relation with invalid app databag: %s", e)
-                continue
-            if ALERTING_SOURCE_ROLE in cluster._expand_roles(app_data.role):
-                source_apps.add(relation.app.name)
-        return sorted(source_apps)
+        return sorted(
+            {unit["application"] for unit in self.coordinator.cluster.gather_topology()}
+        )
 
     def _alertmanager_target_apps(self) -> List[str]:
         """Return the Alertmanager app names related over the `alertmanager` relation."""
@@ -393,12 +378,10 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         )
 
     def _alerting_mesh_policies(self) -> List[MeshPolicy]:
-        """Build L4 policies allowing ruler workers to reach Alertmanager :9093."""
+        """Build L4 policies allowing cluster workers to reach Alertmanager :9093."""
         policies: List[MeshPolicy] = []
         source_apps = self._alerting_source_apps()
         target_apps = self._alertmanager_target_apps()
-        if not source_apps or not target_apps:
-            return policies
         for target_app in target_apps:
             for source_app in source_apps:
                 policies.append(
@@ -430,10 +413,10 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         )
 
     def _reconcile_alerting_mesh_policies(self) -> None:
-        """Reconcile the ruler-worker -> Alertmanager auth policies.
+        """Reconcile the worker -> Alertmanager auth policies.
 
         These cannot be expressed as a regular UnitPolicy/AppPolicy because the source
-        principal must be the ruler workers, not this coordinator (the app holding the
+        principal must be the cluster workers, not this coordinator (the app holding the
         `alertmanager` relation). We therefore manage the AuthorizationPolicy directly via a
         PolicyResourceManager, mirroring the cluster-internal policy pattern in
         coordinated_workers.service_mesh.
@@ -446,7 +429,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         if mesh_type:
             policies = self._alerting_mesh_policies()
             logger.info(
-                "Reconciling %d ruler->alertmanager mesh policies (mesh_type=%s).",
+                "Reconciling %d worker->alertmanager mesh policies (mesh_type=%s).",
                 len(policies),
                 mesh_type,
             )
@@ -664,7 +647,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         # Open necessary service ports. needed for telemetry proxying.
         self.unit.set_ports(NGINX_PORT)
 
-        # Reconcile the ruler-worker -> Alertmanager auth policies (sa/mimir-backend -> :9093).
+        # Reconcile the worker -> Alertmanager auth policies (sa/mimir-backend -> :9093).
         self._reconcile_alerting_mesh_policies()
 
         # Re-publish ingress requirements so scheme/port reflect current TLS state.
