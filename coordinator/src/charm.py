@@ -68,6 +68,15 @@ NGINX_PORT = NginxHelper.port
 ALERTMANAGER_API_PORT = 9093
 
 
+def _truncate_label_value(value: str, max_length: int = 63) -> str:
+    """Truncate a Kubernetes label value to fit within the max length."""
+    if len(value) <= max_length:
+        return value
+    digest = hashlib.sha256(value.encode()).hexdigest()[:8]
+    # Leave room for a dash + 8-char hash suffix.
+    return f"{value[: max_length - 9]}-{digest}"
+
+
 # 60s is expected to be the longest scrape interval in most deployments,
 # so setting timeInterval to it in Grafana when a grafana_source relation is
 # established would guarantee that timestep-sensitive artifacts such as
@@ -398,8 +407,8 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
 
     def _alerting_policy_resource_manager(self) -> PolicyResourceManager:
         """PolicyResourceManager scoped to the alertmanager (ruler-source) policies."""
-        instance = f"{self.app.name}-{self.model.name}"
-        scope = f"{self.app.name}-{self.model.name}-alerting"
+        instance = _truncate_label_value(f"{self.app.name}-{self.model.name}")
+        scope = _truncate_label_value(f"{self.app.name}-{self.model.name}-alerting")
         return PolicyResourceManager(
             charm=self,
             lightkube_client=Client(  # type: ignore
