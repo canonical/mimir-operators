@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 _WORKER_PORTS = [8080]
 
 
+
 class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 

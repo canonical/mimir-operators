@@ -11,7 +11,6 @@ from coordinated_workers.interfaces.cluster import (
     ClusterRequirerUnitData,
 )
 from interface_tester import InterfaceTester
-from ops import ActiveStatus
 from ops.pebble import Layer
 from scenario import Relation
 from scenario.state import Container, Exec, State
@@ -86,15 +85,6 @@ grafana_source_relation = Relation(
 def patch_all():
     with ExitStack() as stack:
         stack.enter_context(patch("lightkube.core.client.GenericSyncClient"))
-        stack.enter_context(
-            patch.multiple(
-                "charms.observability_libs.v0.kubernetes_compute_resources_patch.KubernetesComputeResourcesPatch",
-                _namespace="test-namespace",
-                _patch=lambda _: None,
-                is_ready=MagicMock(return_value=True),
-                get_status=lambda _: ActiveStatus(""),
-            )
-        )
         stack.enter_context(
             patch(
                 "charm.MimirCoordinatorK8SOperatorCharm._ensure_mimirtool",
