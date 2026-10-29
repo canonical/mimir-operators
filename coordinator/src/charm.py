@@ -18,19 +18,22 @@ from urllib.parse import urlparse
 
 import ops
 import yaml
-from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
-from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
-from charms.catalogue_k8s.v1.catalogue import CatalogueItem
-from charms.grafana_k8s.v1.grafana_source import GrafanaSourceProvider
-from charms.istio_beacon_k8s.v0.service_mesh import (
+from canonical_service_mesh.k8s.resource_manager import (
+    PolicyResourceManager,
+)
+from charmlibs.interfaces.service_mesh import (
     AppPolicy,
     Endpoint,
     MeshPolicy,
     Method,
-    PolicyResourceManager,
     PolicyTargetType,
+    ServiceMeshConsumer,
     UnitPolicy,
 )
+from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
+from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
+from charms.catalogue_k8s.v1.catalogue import CatalogueItem
+from charms.grafana_k8s.v1.grafana_source import GrafanaSourceProvider
 from charms.mimir_coordinator_k8s.v0.prometheus_api import (
     DEFAULT_RELATION_NAME as PROMETHEUS_API_RELATION_NAME,
 )
@@ -106,7 +109,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             scheme=lambda: urlparse(self.internal_url).scheme,
         )
         self.alertmanager = AlertmanagerConsumer(charm=self, relation_name="alertmanager")
-        self.retention_period = str(self.config['metrics_retention_period'])
+        self.retention_period = str(self.config["metrics_retention_period"])
         self.out_of_order_time_window = str(self.config["out_of_order_time_window"])
         self.coordinator = Coordinator(
             charm=self,
@@ -140,14 +143,16 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 topology=JujuTopology.from_charm(self),
                 alertmanager_urls=self.alertmanager.get_cluster_info(),
                 max_global_exemplars_per_user=int(self.config["max_global_exemplars_per_user"]),
-                metrics_retention_period=self.retention_period if is_valid_timespec(self.retention_period) else None,
+                metrics_retention_period=self.retention_period
+                if is_valid_timespec(self.retention_period)
+                else None,
                 ingestion_rate=max(0, int(self.config["ingestion_rate"])),
-                out_of_order_time_window=self.out_of_order_time_window if is_valid_timespec(self.out_of_order_time_window) else None,
+                out_of_order_time_window=self.out_of_order_time_window
+                if is_valid_timespec(self.out_of_order_time_window)
+                else None,
                 reporting_enabled=bool(self.config["reporting_enabled"]),
             ).config,
             worker_ports=lambda _: tuple({8080, 9095}),
-            resources_requests=self.get_resource_requests,
-            container_name="nginx",  # container to which resource limits will be applied
             workload_tracing_protocols=["jaeger_thrift_http"],
             catalogue_item=self._catalogue_item,
             worker_telemetry_proxy_config=self._worker_telemetry_proxy_config,
@@ -198,9 +203,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
         self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
-        self.framework.observe(
-            self.on.certificates_relation_broken, self._on_certificates_changed
-        )
+        self.framework.observe(self.on.certificates_relation_broken, self._on_certificates_changed)
 
     ##########################
     # === EVENT HANDLERS === #
@@ -300,7 +303,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 "(no user interface available)"
             ),
             api_docs="https://grafana.com/docs/mimir/latest/references/http-api/",
-            api_endpoints={key: f"{self.external_url}{path}" for key, path in api_endpoints.items()},
+            api_endpoints={
+                key: f"{self.external_url}{path}" for key, path in api_endpoints.items()
+            },
         )
 
     # TODO: make this a static method in the Nginx class
@@ -373,9 +378,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
          - For simplicity we authorize *all* cluster worker apps. This can be tightened in the future.
          - `gather_topology()` is unit-derived, so a worker app with no reporting units will not appear.
         """
-        return sorted(
-            {unit["application"] for unit in self.coordinator.cluster.gather_topology()}
-        )
+        return sorted({unit["application"] for unit in self.coordinator.cluster.gather_topology()})
 
     def _alertmanager_target_apps(self) -> List[str]:
         """Return the Alertmanager app names related over the `alertmanager` relation."""
@@ -452,7 +455,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         """
         try:
             return cast(str, self._nginx_container.pull(path, encoding="utf-8").read())
-        except (FileNotFoundError, PebbleError):
+        except FileNotFoundError, PebbleError:
             # Drop FileNotFoundError https://github.com/canonical/operator/issues/896
             return None
 
@@ -538,7 +541,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             )
         except AlertRulesCustomizationError as e:
             logger.error("An error occurred while parsing alert rule customizations: %s", e)
-            customization = AlertRulesCustomization(query_type="promql")  # no-op: write rules unmodified
+            customization = AlertRulesCustomization(
+                query_type="promql"
+            )  # no-op: write rules unmodified
 
         try:
             remote_write_alerts = customization.apply(self.remote_write_provider.alerts)
@@ -608,18 +613,26 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 )
         self.coordinator.datasource_exchange.publish(datasources=raw_datasources)
 
-    def get_resource_requests(self, _) -> Dict[str, str]:
-        """Returns a dictionary for the "requests" portion of the resources requirements."""
-        return {"cpu": "50m", "memory": "100Mi"}
-
     def _on_collect_unit_status(self, event: ops.CollectStatusEvent):
         event.add_status(ActiveStatus())
         if not is_valid_timespec(self.retention_period):
-            logger.info(f"Suspending data deletion due to invalid option set in config: {self.retention_period}. To resume data deletion, please reset value to a valid option.")
-            event.add_status(BlockedStatus(f"Invalid config option (see debug-log): retention_period={self.retention_period}"))
+            logger.info(
+                f"Suspending data deletion due to invalid option set in config: {self.retention_period}. To resume data deletion, please reset value to a valid option."
+            )
+            event.add_status(
+                BlockedStatus(
+                    f"Invalid config option (see debug-log): retention_period={self.retention_period}"
+                )
+            )
         if not is_valid_timespec(self.out_of_order_time_window):
-            logger.info(f"Suspending out-of-order ingestion due to invalid option set in config: {self.out_of_order_time_window}. To resume out-of-order ingestion, please reset value to a valid option.")
-            event.add_status(BlockedStatus(f"Invalid config option (see debug-log): out_of_order_time_window={self.out_of_order_time_window}"))
+            logger.info(
+                f"Suspending out-of-order ingestion due to invalid option set in config: {self.out_of_order_time_window}. To resume out-of-order ingestion, please reset value to a valid option."
+            )
+            event.add_status(
+                BlockedStatus(
+                    f"Invalid config option (see debug-log): out_of_order_time_window={self.out_of_order_time_window}"
+                )
+            )
         try:
             AlertRulesCustomization.from_yaml(
                 cast(str, self.model.config.get("alert_rule_customizations") or ""),
@@ -629,7 +642,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             logger.error("Invalid alert rule customizations: %s", e)
             event.add_status(BlockedStatus("Invalid alert rule customizations. See debug-log"))
         if self._stored.alert_rules_customization_invalid:
-            event.add_status(BlockedStatus("Unable to validate alert rule customizations. See debug-log"))
+            event.add_status(
+                BlockedStatus("Unable to validate alert rule customizations. See debug-log")
+            )
         if self.remote_write_provider.has_invalid_alert_rules():
             event.add_status(BlockedStatus("Invalid alert rules. See debug-log"))
 
@@ -658,7 +673,6 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         if port := urlparse(self.internal_url).port:
             self.ingress.provide_ingress_requirements(port=port)
 
-
     def _build_grafana_source_extra_fields(self) -> Dict[str, Any]:
         """Extra fields needed for the grafana-source relation, like data correlation config."""
         metrics_to_traces_config = self._build_metrics_to_traces_config()
@@ -674,7 +688,9 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         # reference: https://grafana.com/docs/grafana/latest/datasources/prometheus/configure/#provision-the-prometheus-data-source
         # this feature is only available when exemplar storage is enabled
         if int(self.config["max_global_exemplars_per_user"]) <= 0:
-            logger.info("metrics-to-traces feature is disabled because exemplar storage is disabled.")
+            logger.info(
+                "metrics-to-traces feature is disabled because exemplar storage is disabled."
+            )
             return {}
 
         if datasource := self._telemetry_correlation.find_correlated_datasource(
@@ -682,13 +698,15 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             correlation_feature="metrics-to-traces",
         ):
             return {
-                "exemplarTraceIdDestinations": [{
+                "exemplarTraceIdDestinations": [
+                    {
                         "datasourceUid": datasource.uid,
                         "name": "traceID",
                     }
                 ]
             }
         return {}
+
 
 if __name__ == "__main__":  # pragma: nocover
     ops.main.main(MimirCoordinatorK8SOperatorCharm)

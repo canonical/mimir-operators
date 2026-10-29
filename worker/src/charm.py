@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 _WORKER_PORTS = [8080]
 
 
-
 class MimirWorkerK8SOperatorCharm(CharmBase):
     """A Juju Charmed Operator for Mimir."""
 
@@ -49,9 +48,6 @@ class MimirWorkerK8SOperatorCharm(CharmBase):
             pebble_layer=self.pebble_layer,
             endpoints={"cluster": "mimir-cluster"},
             readiness_check_endpoint=self.readiness_check_endpoint,
-            resources_requests=lambda _: {"cpu": "50m", "memory": "200Mi"},
-            # container we want to resource-patch
-            container_name=self.container_name,
         )
 
         self._container = self.model.unit.get_container(self.container_name)
