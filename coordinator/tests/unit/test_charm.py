@@ -171,3 +171,51 @@ def test_alerts_hash_not_written_on_mimirtool_failure(
     # THEN the hash file is absent so the next hook run retries the sync
     nginx_fs = state_out.get_container("nginx").get_filesystem(context)
     assert not (nginx_fs / ALERTS_HASH_PATH.lstrip("/")).exists()
+
+
+def _status_error(module_name: str, status_code: int):
+    """Build the HTTPStatusError lightkube leaves untranslated for a non-JSON error response."""
+    httpx_like = pytest.importorskip(module_name)
+    request = httpx_like.Request("GET", "https://10.152.183.1/apis/security.istio.io/v1/authorizationpolicies")
+    response = httpx_like.Response(status_code, request=request, text="404 page not found")
+    return httpx_like.HTTPStatusError("error", request=request, response=response)
+
+
+@pytest.mark.parametrize("module_name", ("httpx", "httpx2"))
+def test_cluster_without_istio_crds_does_not_break_reconcile(
+    context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container, module_name
+):
+    """Without a service-mesh relation, a cluster lacking the Istio CRDs must not break reconcile."""
+    # GIVEN a coordinator with a worker and no service-mesh relation, on a cluster where
+    # listing Istio policies answers 404 with a non-JSON body (the CRDs are not installed)
+    state_in = State(
+        relations=[s3, all_worker],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+    )
+    error = _status_error(module_name, 404)
+
+    # WHEN any event is handled
+    with patch("lightkube.core.client.Client.list", side_effect=error):
+        # THEN the hook does not raise
+        context.run(context.on.update_status(), state_in)
+
+
+def test_other_kubernetes_api_errors_still_break_reconcile(
+    context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container
+):
+    """Only a missing CRD is tolerated: other API failures must still surface."""
+    # GIVEN the same setup, but the Kubernetes API answers 500
+    state_in = State(
+        relations=[s3, all_worker],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+    )
+    error = _status_error("httpx", 500)
+
+    # WHEN any event is handled
+    with patch("lightkube.core.client.Client.list", side_effect=error):
+        # THEN the error is not swallowed
+        with pytest.raises(Exception) as exc_info:
+            context.run(context.on.update_status(), state_in)
+        assert error in (exc_info.value, exc_info.value.__cause__)
