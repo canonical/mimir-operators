@@ -38,6 +38,7 @@ from charms.mimir_coordinator_k8s.v0.prometheus_api import PrometheusApiProvider
 from charms.prometheus_k8s.v1.prometheus_remote_write import PrometheusRemoteWriteProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from coordinated_workers.coordinator import Coordinator
+from coordinated_workers.helpers import NON_RECONCILABLE_EVENTS
 from coordinated_workers.telemetry_correlation import TelemetryCorrelation
 from coordinated_workers.worker_telemetry import WorkerTelemetryProxyConfig
 from cosl import (
@@ -47,6 +48,7 @@ from cosl import (
     JujuTopology,
 )
 from cosl.interfaces.datasource_exchange import DatasourceDict
+from cosl.reconciler import all_events, observe_events
 from cosl.time_validation import is_valid_timespec
 from lightkube import Client
 from ops import ActiveStatus, BlockedStatus
@@ -183,8 +185,12 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             # logging is handled by the Coordinator object
             return
 
-        # do this regardless of what event we are processing
-        self._reconcile()
+        # Register (rather than directly call) our own reconcile. Observers run in
+        # registration order, and Coordinator's reconcile was registered first (it publishes
+        # the worker config and reconciles nginx), so it now always runs before our alert-rule
+        # sync below. This prevents a slow `mimirtool rules sync` from delaying the worker
+        # config publication and causing an avoidable worker outage.
+        observe_events(self, all_events.difference(NON_RECONCILABLE_EVENTS), self._reconcile)
 
         ######################################
         # === EVENT HANDLER REGISTRATION === #
