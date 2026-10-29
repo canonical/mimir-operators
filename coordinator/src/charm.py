@@ -27,7 +27,6 @@ from charmlibs.interfaces.service_mesh import (
     MeshPolicy,
     Method,
     PolicyTargetType,
-    ServiceMeshConsumer,
     UnitPolicy,
 )
 from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
