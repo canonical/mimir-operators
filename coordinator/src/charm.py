@@ -18,19 +18,21 @@ from urllib.parse import urlparse
 
 import ops
 import yaml
-from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
-from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
-from charms.catalogue_k8s.v1.catalogue import CatalogueItem
-from charms.grafana_k8s.v1.grafana_source import GrafanaSourceProvider
-from charms.istio_beacon_k8s.v0.service_mesh import (
+from canonical_service_mesh.k8s.resource_manager import (
+    PolicyResourceManager,
+)
+from charmlibs.interfaces.service_mesh import (
     AppPolicy,
     Endpoint,
     MeshPolicy,
     Method,
-    PolicyResourceManager,
     PolicyTargetType,
     UnitPolicy,
 )
+from charmlibs.nginx_k8s import NginxConfig, TLSConfigManager
+from charms.alertmanager_k8s.v1.alertmanager_dispatch import AlertmanagerConsumer
+from charms.catalogue_k8s.v1.catalogue import CatalogueItem
+from charms.grafana_k8s.v1.grafana_source import GrafanaSourceProvider
 from charms.mimir_coordinator_k8s.v0.prometheus_api import (
     DEFAULT_RELATION_NAME as PROMETHEUS_API_RELATION_NAME,
 )
@@ -38,6 +40,7 @@ from charms.mimir_coordinator_k8s.v0.prometheus_api import PrometheusApiProvider
 from charms.prometheus_k8s.v1.prometheus_remote_write import PrometheusRemoteWriteProvider
 from charms.traefik_k8s.v2.ingress import IngressPerAppReadyEvent, IngressPerAppRequirer
 from coordinated_workers.coordinator import Coordinator
+from coordinated_workers.helpers import NON_RECONCILABLE_EVENTS
 from coordinated_workers.telemetry_correlation import TelemetryCorrelation
 from coordinated_workers.worker_telemetry import WorkerTelemetryProxyConfig
 from cosl import (
@@ -47,6 +50,7 @@ from cosl import (
     JujuTopology,
 )
 from cosl.interfaces.datasource_exchange import DatasourceDict
+from cosl.reconciler import all_events, observe_events
 from cosl.time_validation import is_valid_timespec
 from lightkube import Client
 from ops import ActiveStatus, BlockedStatus
@@ -144,8 +148,6 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 reporting_enabled=bool(self.config["reporting_enabled"]),
             ).config,
             worker_ports=lambda _: tuple({8080, 9095}),
-            resources_requests=self.get_resource_requests,
-            container_name="nginx",  # container to which resource limits will be applied
             workload_tracing_protocols=["jaeger_thrift_http"],
             catalogue_item=self._catalogue_item,
             worker_telemetry_proxy_config=self._worker_telemetry_proxy_config,
@@ -183,8 +185,12 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             # logging is handled by the Coordinator object
             return
 
-        # do this regardless of what event we are processing
-        self._reconcile()
+        # Register (rather than directly call) our own reconcile. Observers run in
+        # registration order, and Coordinator's reconcile was registered first (it publishes
+        # the worker config and reconciles nginx), so it now always runs before our alert-rule
+        # sync below. This prevents a slow `mimirtool rules sync` from delaying the worker
+        # config publication and causing an avoidable worker outage.
+        observe_events(self, all_events.difference(NON_RECONCILABLE_EVENTS), self._reconcile)
 
         ######################################
         # === EVENT HANDLER REGISTRATION === #
@@ -601,10 +607,6 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                     {"type": "prometheus", "uid": ds_uid, "grafana_uid": grafana_uid}
                 )
         self.coordinator.datasource_exchange.publish(datasources=raw_datasources)
-
-    def get_resource_requests(self, _) -> Dict[str, str]:
-        """Returns a dictionary for the "requests" portion of the resources requirements."""
-        return {"cpu": "50m", "memory": "100Mi"}
 
     def _on_collect_unit_status(self, event: ops.CollectStatusEvent):
         event.add_status(ActiveStatus())
