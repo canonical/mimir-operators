@@ -14,12 +14,9 @@ import hashlib
 import json
 import logging
 import socket
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Union, cast
 from urllib.parse import urlparse
 
-import httpx
 import ops
 import yaml
 from charmlibs.interfaces.service_mesh import (
@@ -63,47 +60,6 @@ ALERTS_HASH_PATH = "/etc/mimir-alerts/alerts.sha256"
 NGINX_PORT = NginxHelper._port
 NGINX_TLS_PORT = NginxHelper._tls_port
 
-# lightkube >= 1.0 raises the errors of its bundled `httpx2` fork; earlier releases use `httpx`.
-try:
-    import httpx2  # pyright: ignore[reportMissingImports]
-
-    _HTTP_STATUS_ERRORS: tuple[type[Exception], ...] = (
-        httpx.HTTPStatusError,
-        httpx2.HTTPStatusError,
-    )
-except ImportError:
-    _HTTP_STATUS_ERRORS = (httpx.HTTPStatusError,)
-
-
-@contextmanager
-def _ignore_missing_istio_crds() -> Iterator[None]:
-    """Tolerate a 404 from the Kubernetes API caused by the Istio CRDs not being installed.
-
-    lightkube only translates an error response to `ApiError` when its body is JSON. The 404
-    for a nonexistent API group (e.g. security.istio.io) isn't, so the raw HTTP error escapes
-    the 404 handling in `canonical_service_mesh`'s `PolicyResourceManager.delete`, and crashes
-    the hook. Other statuses are re-raised.
-    """
-    try:
-        yield
-    except _HTTP_STATUS_ERRORS as e:
-        if e.response.status_code != 404:  # pyright: ignore[reportAttributeAccessIssue]
-            raise
-        logger.info("Istio CRDs not found in the cluster: no mesh policies to clean up.")
-
-
-class _Coordinator(Coordinator):
-    """Coordinator that survives clusters without the Istio CRDs when no mesh is related."""
-
-    def _reconcile_mesh_policies(self) -> None:
-        # With an active mesh, a missing CRD is a real error; without one, the library only
-        # deletes leftover policies, so there's nothing to do if the CRDs aren't there.
-        if self._mesh and self._mesh.mesh_type():
-            super()._reconcile_mesh_policies()
-            return
-        with _ignore_missing_istio_crds():
-            super()._reconcile_mesh_policies()
-
 
 # 60s is expected to be the longest scrape interval in most deployments,
 # so setting timeInterval to it in Grafana when a grafana_source relation is
@@ -131,7 +87,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self.alertmanager = AlertmanagerConsumer(charm=self, relation_name="alertmanager")
         self.retention_period = str(self.config['metrics_retention_period'])
         self.out_of_order_time_window = str(self.config["out_of_order_time_window"])
-        self.coordinator = _Coordinator(
+        self.coordinator = Coordinator(
             charm=self,
             roles_config=MIMIR_ROLES_CONFIG,
             external_url=self.most_external_url,
