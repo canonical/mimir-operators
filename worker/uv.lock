@@ -81,6 +81,21 @@ wheels = [
 ]
 
 [[package]]
+name = "canonical-service-mesh"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "lightkube" },
+    { name = "ops" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e7/7f/b4227b9e17bd486a8fd99171ae4a865a570ecca531906bfc86849849f765/canonical_service_mesh-0.4.0.tar.gz", hash = "sha256:7f96841a335610ea13c08af3e67d4433ac4cd44c0d07fbb6008e8a998795b0d5", size = 82278, upload-time = "2026-10-30T01:22:40.026Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/c4/edf54e295e6aa4da46f4296af9418a3430a43ba7909eb3a0846aabb8ccf7/canonical_service_mesh-0.4.0-py3-none-any.whl", hash = "sha256:4e46df9fe1a5f344164a035048b122a9c7779bbc484901f03162c5a4b414cff1", size = 43854, upload-time = "2026-10-30T01:22:38.513Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.6.17"
 source = { registry = "https://pypi.org/simple" }
@@ -132,6 +147,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e5/4f/c1f866c0483e6c19f733dc9d8946453c41c2ed63177a8716490ac37d7ce1/charmed_service_mesh_helpers-0.2.0.tar.gz", hash = "sha256:4e62fe6f917d4933610c2f8cfb30a90d46ea026fa302988cffb879abd423ca5a", size = 15348, upload-time = "2025-09-05T13:12:34.329Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/df/dc7086366b212da07ef027e3cc48824dc6a7b1193badc3879d231f6a4ef3/charmed_service_mesh_helpers-0.2.0-py3-none-any.whl", hash = "sha256:913e2a5bfb2db445e4b95085f8c2a8b4dea1036beedd229efca9217877c1da15", size = 13967, upload-time = "2025-09-05T13:12:33.237Z" },
+]
+
+[[package]]
+name = "charmlibs-interfaces-service-mesh"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "canonical-service-mesh" },
+    { name = "ops" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d3/63/29ce18fbb3335e0a670c326c8e03e8b76d5a52980b3d1c2b6d871ef0f4b1/charmlibs_interfaces_service_mesh-1.0.2.tar.gz", hash = "sha256:30eebe3456f95afaff3cc7efb3c731da065d3c4e9bfde3d135523cd684ac61ac", size = 34652, upload-time = "2026-06-17T10:22:19.326Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/1f/718a7ea2bcb78366b309f13cea296e41eecadd0f7ffe26115f9a8958c77f/charmlibs_interfaces_service_mesh-1.0.2-py3-none-any.whl", hash = "sha256:d4b07fadad0e229b27a101ff9eea484eb6073ef4f5efd249ba0fe434582da55f", size = 8389, upload-time = "2026-06-17T10:22:18.159Z" },
 ]
 
 [[package]]
@@ -222,10 +251,12 @@ wheels = [
 
 [[package]]
 name = "coordinated-workers"
-version = "4.1.4"
+version = "5.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "canonical-service-mesh" },
     { name = "charmed-service-mesh-helpers" },
+    { name = "charmlibs-interfaces-service-mesh" },
     { name = "charmlibs-interfaces-tls-certificates" },
     { name = "charmlibs-nginx-k8s" },
     { name = "cosl" },
@@ -235,9 +266,9 @@ dependencies = [
     { name = "ops", extra = ["tracing"] },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/0a/93e9d3cfb605c47e3f3477bea03f7727988b54c0c055040da253701f5ee4/coordinated_workers-4.1.4.tar.gz", hash = "sha256:bac9239b170cd9dabbbec51133d93c39dd34061442112b5e2fd673ebd13b63b5", size = 381874, upload-time = "2026-09-29T15:51:22.799Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/59/de/dcdf31a759fa15da10bf919b34f2df036d3fb6dcc6e881b3acda3f19f464/coordinated_workers-5.0.0.tar.gz", hash = "sha256:3a29cbbf0c20a69f9862c288b622550fa2732e85b1b0aba598fcd03a2d1ddd84", size = 410297, upload-time = "2026-10-29T20:25:32.608Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/4e/f0ea9148cfae773ef9788408849c7b7cdbf01a93415c03fbea2ea56e03a7/coordinated_workers-4.1.4-py3-none-any.whl", hash = "sha256:1948137f9b39eb315d105703ea9496907c7bff125255a58c07065ab26b710467", size = 49360, upload-time = "2026-09-29T15:51:21.481Z" },
+    { url = "https://files.pythonhosted.org/packages/06/ea/ac751780d1423f5c70bcbbc8928f66cab8bf35d3a220003348adc3fc4364/coordinated_workers-5.0.0-py3-none-any.whl", hash = "sha256:1b9eb9a104bb05c4e0555f9064ed332707e66ef7f4561091ae4fae8c477847e7", size = 47387, upload-time = "2026-10-29T20:25:31.09Z" },
 ]
 
 [[package]]
@@ -660,7 +691,7 @@ dev = [
 requires-dist = [
     { name = "charmed-service-mesh-helpers", specifier = ">=0.2.0" },
     { name = "codespell", marker = "extra == 'dev'" },
-    { name = "coordinated-workers", specifier = "~=4.1.0" },
+    { name = "coordinated-workers", specifier = ">=5" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "juju", marker = "extra == 'dev'" },
     { name = "lightkube-extensions" },
