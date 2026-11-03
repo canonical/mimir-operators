@@ -121,6 +121,24 @@ def test_ingestion_rate_and_burst_logic(topology, ingestion_rate, expected_rate,
     assert limits["ingestion_burst_size"] == expected_burst
 
 
+@pytest.mark.parametrize(
+    "max_global_series_per_user, expected_value",
+    [
+        (None, 0),          # unset → retains the previous hardcoded behavior
+        (0, 0),             # 0 → limit disabled
+        (150_000, 150_000), # positive value → passed through unchanged
+    ],
+)
+def test_max_global_series_per_user_logic(
+    topology, max_global_series_per_user, expected_value
+):
+    cfg = MimirConfig(
+        topology=topology, max_global_series_per_user=max_global_series_per_user
+    )
+    limits = cfg._build_limits_config()
+    assert limits["max_global_series_per_user"] == expected_value
+
+
 def test_build_alertmanager_storage_config(mimir_config):
     alertmanager_storage_config = mimir_config._build_alertmanager_storage_config()
     expected_config = {"filesystem": {"dir": "/recovery-data/data-alertmanager"}}
