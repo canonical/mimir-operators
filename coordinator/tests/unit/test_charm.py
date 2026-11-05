@@ -100,6 +100,36 @@ def test_config_max_global_series_per_user(context, s3, all_worker, nginx_contai
         assert sent == expected_series
 
 @pytest.mark.parametrize(
+    "set_config, expected_value",
+    [
+        (False, False),
+        (True, True),
+    ]
+)
+def test_config_cardinality_analysis_enabled(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container, set_config, expected_value):
+    """Ensure the configured cardinality_analysis_enabled is sent to the worker by the coordinator."""
+    # GIVEN the cardinality_analysis_enabled option is set in Mimir Coordinator
+    config = {"cardinality_analysis_enabled": set_config}
+
+    state_in = State(
+        relations=[
+            s3,
+            all_worker,
+        ],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+        config=config
+    )
+
+    # WHEN a worker joins a relation to a coordinator
+    with context(context.on.relation_joined(all_worker), state_in) as mgr:
+        state_out = mgr.run()
+
+        # THEN the worker should have the correct cardinality analysis setting
+        sent = get_key_from_worker_config_exemplars(state_out.relations, "mimir-cluster", "cardinality_analysis_enabled")
+        assert sent == expected_value
+
+@pytest.mark.parametrize(
     "set_config, expected_value, expected_status",
     [
         ("1m", "1m", ActiveStatus),
