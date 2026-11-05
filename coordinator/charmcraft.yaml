@@ -216,6 +216,15 @@ config:
         Otherwise, the value is set to the greater of the setpoint or 100,000.
         Ref: https://grafana.com/docs/mimir/latest/manage/use-exemplars/store-exemplars/
       type: int
+    max_global_series_per_user:
+      default: 0
+      description: |
+        The maximum number of in-memory series per tenant, across the cluster before replication.
+        Exceeding this limit rejects the excess series with a client error (4xx). 0 disables the limit.
+        Negative values are clamped to 0.
+        Ref: https://grafana.com/docs/mimir/latest/configure/configuration-parameters/#limits
+        CLI flag: -ingester.max-global-series-per-user
+      type: int
     ingestion_rate:
       default: 100000
       description: |
