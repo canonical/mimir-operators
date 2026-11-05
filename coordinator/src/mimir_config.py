@@ -389,11 +389,6 @@ class MimirConfig:
             # CLI flag: -querier.cardinality-analysis-enabled
             "cardinality_analysis_enabled": self._cardinality_analysis_enabled,
 
-            # Maximum number of results returned by a single cardinality analysis
-            # request.
-            # CLI flag: -querier.cardinality-api-max-series-limit
-            "cardinality_analysis_max_results": 500,
-
             # Maximum number of rules per rule group per-tenant. 0 to disable.
             # CLI flag: -ruler.max-rules-per-rule-group
             "ruler_max_rules_per_rule_group": 0,  # default = 20

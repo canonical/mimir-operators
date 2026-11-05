@@ -240,7 +240,7 @@ config:
         query-frontend/querier. This is the supported way to find which labels and
         label values drive in-memory series growth.
         The API is on-demand and read-only, but queries can be CPU- and memory-heavy
-        on ingesters, so it is disabled by default (matching upstream).
+        on ingesters, so it is disabled by default.
         Ref: https://grafana.com/docs/mimir/latest/references/http-api/
         CLI flag: -querier.cardinality-analysis-enabled
       type: boolean
