@@ -139,6 +139,29 @@ def test_max_global_series_per_user_logic(
     assert limits["max_global_series_per_user"] == expected_value
 
 
+def test_cardinality_analysis_disabled_by_default(topology):
+    cfg = MimirConfig(topology=topology)
+    assert cfg._build_limits_config()["cardinality_analysis_enabled"] is False
+
+
+@pytest.mark.parametrize(
+    "cardinality_analysis_enabled, expected_value",
+    [
+        (False, False),  # disabled (matches upstream default)
+        (True, True),    # explicitly enabled
+    ],
+)
+def test_cardinality_analysis_enabled_logic(
+    topology, cardinality_analysis_enabled, expected_value
+):
+    cfg = MimirConfig(
+        topology=topology,
+        cardinality_analysis_enabled=cardinality_analysis_enabled,
+    )
+    limits = cfg._build_limits_config()
+    assert limits["cardinality_analysis_enabled"] == expected_value
+
+
 def test_build_alertmanager_storage_config(mimir_config):
     alertmanager_storage_config = mimir_config._build_alertmanager_storage_config()
     expected_config = {"filesystem": {"dir": "/recovery-data/data-alertmanager"}}
