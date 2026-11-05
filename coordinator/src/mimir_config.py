@@ -385,9 +385,7 @@ class MimirConfig:
 
         limits_config: Dict[str, Any] = {
             # Enable the /api/v1/cardinality/* endpoints (and /active_series) on the
-            # query-frontend/querier, used to analyse which labels/label values drive
-            # in-memory series growth. Disabled upstream by default.
-            # Limit: limits.cardinality_analysis_enabled
+            # query-frontend/querier
             # CLI flag: -querier.cardinality-analysis-enabled
             "cardinality_analysis_enabled": self._cardinality_analysis_enabled,
 
