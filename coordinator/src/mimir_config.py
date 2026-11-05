@@ -390,8 +390,7 @@ class MimirConfig:
             "cardinality_analysis_enabled": self._cardinality_analysis_enabled,
 
             # Maximum number of results returned by a single cardinality analysis
-            # request. Default 500.
-            # Limit: limits.cardinality_analysis_max_results
+            # request.
             # CLI flag: -querier.cardinality-api-max-series-limit
             "cardinality_analysis_max_results": 500,
 
