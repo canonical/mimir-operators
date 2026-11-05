@@ -225,6 +225,15 @@ config:
         Ref: https://grafana.com/docs/mimir/latest/configure/configuration-parameters/#limits
         CLI flag: -ingester.max-global-series-per-user
       type: int
+    max_global_series_per_metric:
+      default: 0
+      description: |
+        The maximum number of in-memory series per metric name, per tenant, across the cluster before replication.
+        Exceeding this limit rejects the excess series with a client error (4xx). 0 disables the limit.
+        Negative values are clamped to 0.
+        Ref: https://grafana.com/docs/mimir/latest/configure/configuration-parameters/#limits
+        CLI flag: -ingester.max-global-series-per-metric
+      type: int
     ingestion_rate:
       default: 100000
       description: |

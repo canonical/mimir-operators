@@ -139,6 +139,24 @@ def test_max_global_series_per_user_logic(
     assert limits["max_global_series_per_user"] == expected_value
 
 
+@pytest.mark.parametrize(
+    "max_global_series_per_metric, expected_value",
+    [
+        (None, 0),          # unset → defaults to disabled
+        (0, 0),             # 0 → limit disabled
+        (100_000, 100_000), # positive value → passed through unchanged
+    ],
+)
+def test_max_global_series_per_metric_logic(
+    topology, max_global_series_per_metric, expected_value
+):
+    cfg = MimirConfig(
+        topology=topology, max_global_series_per_metric=max_global_series_per_metric
+    )
+    limits = cfg._build_limits_config()
+    assert limits["max_global_series_per_metric"] == expected_value
+
+
 def test_build_alertmanager_storage_config(mimir_config):
     alertmanager_storage_config = mimir_config._build_alertmanager_storage_config()
     expected_config = {"filesystem": {"dir": "/recovery-data/data-alertmanager"}}
