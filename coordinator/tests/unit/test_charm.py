@@ -100,6 +100,37 @@ def test_config_max_global_series_per_user(context, s3, all_worker, nginx_contai
         assert sent == expected_series
 
 @pytest.mark.parametrize(
+    "set_config, expected_series",
+    [
+        (0, 0),                 # 0 disables the limit
+        (-1, 0),                # negative values are clamped to 0
+        (100_000, 100_000),     # positive values are passed through
+    ]
+)
+def test_config_max_global_series_per_metric(context, s3, all_worker, nginx_container, nginx_prometheus_exporter_container, set_config, expected_series):
+    """Ensure the configured max_global_series_per_metric is sent to the worker by the coordinator."""
+    # GIVEN the max_global_series_per_metric limit is set in Mimir Coordinator
+    config = {"max_global_series_per_metric": set_config}
+
+    state_in = State(
+        relations=[
+            s3,
+            all_worker,
+        ],
+        containers=[nginx_container, nginx_prometheus_exporter_container],
+        leader=True,
+        config=config
+    )
+
+    # WHEN a worker joins a relation to a coordinator
+    with context(context.on.relation_joined(all_worker), state_in) as mgr:
+        state_out = mgr.run()
+
+        # THEN the worker should have the correct in-memory series limit
+        sent = get_key_from_worker_config_exemplars(state_out.relations, "mimir-cluster", "max_global_series_per_metric")
+        assert sent == expected_series
+
+@pytest.mark.parametrize(
     "set_config, expected_value, expected_status",
     [
         ("1m", "1m", ActiveStatus),

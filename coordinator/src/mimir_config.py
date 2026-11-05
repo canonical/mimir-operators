@@ -110,6 +110,7 @@ class MimirConfig:
         topology: JujuTopology,
         max_global_exemplars_per_user: Optional[int] = None,
         max_global_series_per_user: Optional[int] = None,
+        max_global_series_per_metric: Optional[int] = None,
         alertmanager_urls: Set[str] = set(),
         root_data_dir: Path = Path("/data"),
         recovery_data_dir: Path = Path("/recovery-data"),
@@ -123,6 +124,7 @@ class MimirConfig:
         self._recovery_data_dir = recovery_data_dir
         self._max_global_exemplars_per_user = max_global_exemplars_per_user
         self._max_global_series_per_user = max_global_series_per_user
+        self._max_global_series_per_metric = max_global_series_per_metric
         self._topology = topology
         self._metrics_retention_period: str = metrics_retention_period or "0"
         self._ingestion_rate = ingestion_rate
@@ -381,6 +383,12 @@ class MimirConfig:
             else 0
         )
 
+        max_global_series_per_metric = (
+            self._max_global_series_per_metric
+            if self._max_global_series_per_metric is not None
+            else 0
+        )
+
         limits_config: Dict[str, Any] = {
             # Maximum number of rules per rule group per-tenant. 0 to disable.
             # CLI flag: -ruler.max-rules-per-rule-group
@@ -394,6 +402,11 @@ class MimirConfig:
             # replication. 0 to disable.
             # CLI flag: -ingester.max-global-series-per-user
             "max_global_series_per_user": max_global_series_per_user,  # default = 150000
+
+            # The maximum number of in-memory series per metric name, per tenant, across the
+            # cluster before replication. 0 to disable.
+            # CLI flag: -ingester.max-global-series-per-metric
+            "max_global_series_per_metric": max_global_series_per_metric,
 
             "ingestion_rate": ingestion_rate,
 
