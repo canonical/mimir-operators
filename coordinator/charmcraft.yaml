@@ -233,6 +233,17 @@ config:
         The ingestion burst size is automatically set to 20x this value.
         CLI flag: -distributor.ingestion-rate-limit
       type: int
+    cardinality_analysis_enabled:
+      default: false
+      description: |
+        Enable the Mimir cardinality analysis API (/api/v1/cardinality/*) on the
+        query-frontend/querier. This is the supported way to find which labels and
+        label values drive in-memory series growth.
+        The API is on-demand and read-only, but queries can be CPU- and memory-heavy
+        on ingesters, so it is disabled by default (matching upstream).
+        Ref: https://grafana.com/docs/mimir/latest/references/http-api/
+        CLI flag: -querier.cardinality-analysis-enabled
+      type: boolean
     metrics_retention_period:
       default: "15d"
       description: |

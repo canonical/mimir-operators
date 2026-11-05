@@ -115,6 +115,7 @@ class MimirConfig:
         recovery_data_dir: Path = Path("/recovery-data"),
         metrics_retention_period: Optional[str] = None,
         ingestion_rate: Optional[int] = None,
+        cardinality_analysis_enabled: bool = False,
         out_of_order_time_window: Optional[str] = None,
         reporting_enabled: bool = True,
     ):
@@ -126,6 +127,7 @@ class MimirConfig:
         self._topology = topology
         self._metrics_retention_period: str = metrics_retention_period or "0"
         self._ingestion_rate = ingestion_rate
+        self._cardinality_analysis_enabled = cardinality_analysis_enabled
         self._out_of_order_time_window = out_of_order_time_window
         self._reporting_enabled = reporting_enabled
 
@@ -382,6 +384,19 @@ class MimirConfig:
         )
 
         limits_config: Dict[str, Any] = {
+            # Enable the /api/v1/cardinality/* endpoints (and /active_series) on the
+            # query-frontend/querier, used to analyse which labels/label values drive
+            # in-memory series growth. Disabled upstream by default.
+            # Limit: limits.cardinality_analysis_enabled
+            # CLI flag: -querier.cardinality-analysis-enabled
+            "cardinality_analysis_enabled": self._cardinality_analysis_enabled,
+
+            # Maximum number of results returned by a single cardinality analysis
+            # request. Default 500.
+            # Limit: limits.cardinality_analysis_max_results
+            # CLI flag: -querier.cardinality-api-max-series-limit
+            "cardinality_analysis_max_results": 500,
+
             # Maximum number of rules per rule group per-tenant. 0 to disable.
             # CLI flag: -ruler.max-rules-per-rule-group
             "ruler_max_rules_per_rule_group": 0,  # default = 20
