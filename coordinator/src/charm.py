@@ -122,6 +122,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 max_global_series_per_user=max(0, int(self.config["max_global_series_per_user"])),
                 metrics_retention_period=self.retention_period if is_valid_timespec(self.retention_period) else None,
                 ingestion_rate=max(0, int(self.config["ingestion_rate"])),
+                cardinality_analysis_enabled=bool(self.config["cardinality_analysis_enabled"]),
                 out_of_order_time_window=self.out_of_order_time_window if is_valid_timespec(self.out_of_order_time_window) else None,
                 reporting_enabled=bool(self.config["reporting_enabled"]),
             ).config,
