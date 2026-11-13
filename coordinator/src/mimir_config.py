@@ -118,6 +118,7 @@ class MimirConfig:
         cardinality_analysis_enabled: bool = False,
         out_of_order_time_window: Optional[str] = None,
         reporting_enabled: bool = True,
+        replication_lock_state: Optional[Dict[str, bool]] = None,
     ):
         self._alertmanager_urls = alertmanager_urls
         self._root_data_dir = root_data_dir
@@ -130,6 +131,13 @@ class MimirConfig:
         self._cardinality_analysis_enabled = cardinality_analysis_enabled
         self._out_of_order_time_window = out_of_order_time_window
         self._reporting_enabled = reporting_enabled
+        # Per-role flag: once a role has had >= REPLICATION_MIN_WORKERS units, its
+        # replication factor is locked at DEFAULT_REPLICATION even if the live unit count
+        # later dips. The caller (charm.py) should pass in a dict persisted across hooks
+        # (e.g. a peer relation databag) so the lock survives restarts.
+        self._replication_lock_state: Dict[str, bool] = (
+            replication_lock_state if replication_lock_state is not None else {}
+        )
 
     def config(self, coordinator: Coordinator) -> str:
         """Generate shared config file for mimir.
@@ -181,6 +189,26 @@ class MimirConfig:
             # FIXME: investigate adding grpc_tls_config: https://github.com/canonical/mimir-coordinator-k8s-operator/issues/141
         }
 
+    def _replication_factor_for_role(self, cluster: ClusterProvider, role: str) -> int:
+        """Compute the ring/sharding replication_factor to use for a given role.
+
+        This is "sticky": once a role has had >= REPLICATION_MIN_WORKERS units related,
+        the replication factor is locked to DEFAULT_REPLICATION and won't drop back to 1
+        just because the live unit count temporarily dips. The lock is only released when
+        the live count drops to 0 or 1, treated as an intentional scale-down.
+        """
+        scale = len(cluster.gather_addresses_by_role().get(role, []))
+
+        if scale >= REPLICATION_MIN_WORKERS:
+            self._replication_lock_state[role] = True
+            return DEFAULT_REPLICATION
+
+        if scale <= 1:
+            self._replication_lock_state[role] = False
+            return 1
+
+        return DEFAULT_REPLICATION if self._replication_lock_state.get(role, False) else 1
+
     # data_dir:
     # The Mimir Alertmanager stores the alerts state on local disk at the location configured using -alertmanager.storage.path.
     # Should be persisted if not replicated
@@ -188,13 +216,10 @@ class MimirConfig:
     # sharding_ring.replication_factor: int
     # (advanced) The replication factor to use when sharding the alertmanager.
     def _build_alertmanager_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
-        alertmanager_scale = len(cluster.gather_addresses_by_role().get("alertmanager", []))
         return {
             "data_dir": str(self._root_data_dir / "data-alertmanager"),
             "sharding_ring": {
-                "replication_factor": (
-                    1 if alertmanager_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
-                )
+                "replication_factor": self._replication_factor_for_role(cluster, "alertmanager")
             },
         }
 
@@ -262,12 +287,9 @@ class MimirConfig:
     # needs be set on ingesters, distributors, queriers and rulers when running in
     # microservices mode.
     def _build_ingester_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
-        ingester_scale = len(cluster.gather_addresses_by_role().get("ingester", []))
         return {
             "ring": {
-                "replication_factor": (
-                    1 if ingester_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
-                )
+                "replication_factor": self._replication_factor_for_role(cluster, "ingester")
             }
         }
 
@@ -285,12 +307,9 @@ class MimirConfig:
     # needs be set both on the store-gateway, querier and ruler when running in
     # microservices mode.
     def _build_store_gateway_config(self, cluster: ClusterProvider) -> Dict[str, Any]:
-        store_gateway_scale = len(cluster.gather_addresses_by_role().get("store-gateway", []))
         return {
             "sharding_ring": {
-                "replication_factor": (
-                    1 if store_gateway_scale < REPLICATION_MIN_WORKERS else DEFAULT_REPLICATION
-                )
+                "replication_factor": self._replication_factor_for_role(cluster, "store-gateway")
             }
         }
 

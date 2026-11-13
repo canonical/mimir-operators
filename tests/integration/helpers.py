@@ -54,6 +54,27 @@ def get_unit_address(juju: jubilant.Juju, app_name: str, unit_no: int) -> str:
     return unit.address
 
 
+def get_worker_rendered_config(
+    juju: jubilant.Juju, unit: str, workload_container: str = "mimir"
+) -> dict[str, Any]:
+    """Read and parse the rendered Mimir config.yaml from a worker unit's workload container."""
+    stdout = juju.cli(
+        "ssh",
+        "--container",
+        workload_container,
+        unit,
+        "cat",
+        "/etc/worker/config.yaml",
+    )
+    return yaml.safe_load(stdout)
+
+
+def get_replication_factor(config: dict[str, Any], component: str) -> int:
+    """Extract replication_factor for a Mimir component ("ingester", "store_gateway", ...)."""
+    ring_key = "ring" if component == "ingester" else "sharding_ring"
+    return config[component][ring_key]["replication_factor"]
+
+
 def deploy_swfs(juju: jubilant.Juju, swfs_app: str = SWFS_APP):
     """Deploy SeaweedFS as an S3 test backend."""
     juju.deploy("seaweedfs-k8s", swfs_app, channel=SWFS_CHANNEL)
@@ -266,6 +287,32 @@ def push_and_verify_exemplars(juju: jubilant.Juju, coordinator_app: str) -> None
     trace_id = push_to_otelcol(juju, metric_name=metric_name)
     found = _query_exemplars(juju, query_name=metric_name, coordinator_app=coordinator_app)
     assert found == trace_id, f"Trace ID mismatch: expected {trace_id}, got {found}"
+
+
+def push_metric(juju: jubilant.Juju, metric_name: str | None = None) -> str:
+    """Push a plain counter metric to Mimir (via otelcol's remote-write) and return its name."""
+    if metric_name is None:
+        metric_name = f"sample_metric_{uuid.uuid4().hex[:8]}"
+    push_to_otelcol(juju, metric_name=metric_name)
+    return metric_name
+
+
+@retry(wait=wait_fixed(10), stop=stop_after_attempt(12))
+def verify_metric_queryable(
+    juju: jubilant.Juju, metric_name: str, coordinator_app: str = "mimir"
+) -> None:
+    """Retry querying Mimir until `metric_name` is queryable."""
+    result = query_mimir_from_client_localhost(juju, query=metric_name, coordinator_app=coordinator_app)
+    assert result, f"metric {metric_name!r} not queryable in Mimir"
+
+
+def push_and_verify_metric(
+    juju: jubilant.Juju, metric_name: str | None = None, coordinator_app: str = "mimir"
+) -> str:
+    """Push a plain counter metric to Mimir and verify it becomes queryable."""
+    metric_name = push_metric(juju, metric_name=metric_name)
+    verify_metric_queryable(juju, metric_name, coordinator_app=coordinator_app)
+    return metric_name
 
 
 def get_istio_ingress_ip(juju: jubilant.Juju, app_name: str = "istio-ingress") -> str:
