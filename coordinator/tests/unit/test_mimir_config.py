@@ -7,6 +7,15 @@ from deepdiff import DeepDiff
 
 from src.mimir_config import MimirConfig
 
+# Regression tests for https://github.com/canonical/mimir-operators/issues/503:
+# replication_factor must not flip 3 -> 1 -> 3 as the live unit count for a role
+# transiently dips below REPLICATION_MIN_WORKERS and recovers.
+RING_BUILDERS = {
+    "ingester": ("_build_ingester_config", ("ring", "replication_factor")),
+    "store-gateway": ("_build_store_gateway_config", ("sharding_ring", "replication_factor")),
+    "alertmanager": ("_build_alertmanager_config", ("sharding_ring", "replication_factor")),
+}
+
 
 @pytest.fixture(scope="module")
 def topology():
@@ -448,6 +457,97 @@ def test_reporting_disabled(topology, coordinator):
     config_yaml = cfg.config(coordinator)
     config_dict = yaml.safe_load(config_yaml)
     assert config_dict["usage_stats"] == {"enabled": False}
+
+
+def _replication_factor(config: dict, path) -> int:
+    for key in path:
+        config = config[key]
+    return config
+
+
+def _make_cluster(role: str, scale: int):
+    cluster = MagicMock()
+    addresses = [f"http://worker-{role}-{i}:8080" for i in range(scale)]
+    cluster.gather_addresses_by_role = MagicMock(return_value={role: addresses})
+    return cluster
+
+
+@pytest.mark.parametrize("role", list(RING_BUILDERS.keys()))
+def test_replication_factor_does_not_downgrade_after_losing_one_of_three_units(topology, role):
+    """3 units -> RF 3, then lose 1 unit -> RF must stay 3, then back to 3 units -> still 3."""
+    method_name, path = RING_BUILDERS[role]
+    cfg = MimirConfig(topology=topology)
+    builder = getattr(cfg, method_name)
+
+    assert _replication_factor(builder(_make_cluster(role, 3)), path) == 3
+    assert _replication_factor(builder(_make_cluster(role, 2)), path) == 3
+    assert _replication_factor(builder(_make_cluster(role, 3)), path) == 3
+
+
+@pytest.mark.parametrize("role", list(RING_BUILDERS.keys()))
+def test_replication_factor_never_locked_below_three_units(topology, role):
+    """Before ever reaching 3 units, RF stays at 1."""
+    method_name, path = RING_BUILDERS[role]
+    cfg = MimirConfig(topology=topology)
+    builder = getattr(cfg, method_name)
+
+    assert _replication_factor(builder(_make_cluster(role, 1)), path) == 1
+    assert _replication_factor(builder(_make_cluster(role, 2)), path) == 1
+
+
+@pytest.mark.parametrize("role", list(RING_BUILDERS.keys()))
+def test_replication_factor_unlocks_on_scale_down_to_single_unit(topology, role):
+    """Scaling down to a single unit releases the lock until 3 units are reached again."""
+    method_name, path = RING_BUILDERS[role]
+    cfg = MimirConfig(topology=topology)
+    builder = getattr(cfg, method_name)
+
+    assert _replication_factor(builder(_make_cluster(role, 3)), path) == 3
+    assert _replication_factor(builder(_make_cluster(role, 1)), path) == 1
+    assert _replication_factor(builder(_make_cluster(role, 2)), path) == 1
+    assert _replication_factor(builder(_make_cluster(role, 3)), path) == 3
+
+
+def test_replication_lock_state_shared_across_roles_is_independent():
+    """The lock for one role must not affect another role's replication factor."""
+    topology = MagicMock()
+    topology.as_dict = MagicMock(
+        return_value={
+            "model": "m",
+            "model_uuid": "u",
+            "application": "mimir",
+            "unit": "mimir-0",
+            "charm_name": "mimir-coordinator-k8s",
+        }
+    )
+    shared_state: dict = {}
+    cfg = MimirConfig(topology=topology, replication_lock_state=shared_state)
+
+    ingester_cluster = MagicMock()
+    ingester_cluster.gather_addresses_by_role = MagicMock(
+        return_value={"ingester": ["a", "b", "c"]}
+    )
+    assert cfg._build_ingester_config(ingester_cluster)["ring"]["replication_factor"] == 3
+    assert shared_state == {"ingester": True}
+
+    sg_cluster = MagicMock()
+    sg_cluster.gather_addresses_by_role = MagicMock(return_value={"store-gateway": ["a"]})
+    assert cfg._build_store_gateway_config(sg_cluster)["sharding_ring"]["replication_factor"] == 1
+    assert shared_state == {"ingester": True, "store-gateway": False}
+
+
+def test_replication_lock_state_is_externally_persistable(topology):
+    """The lock state dict passed by the caller is mutated in place and can be reused."""
+    persisted_state: dict = {}
+    cfg = MimirConfig(topology=topology, replication_lock_state=persisted_state)
+
+    cfg._build_ingester_config(_make_cluster("ingester", 3))
+    assert persisted_state == {"ingester": True}
+
+    cfg2 = MimirConfig(topology=topology, replication_lock_state=persisted_state)
+    rf = cfg2._build_ingester_config(_make_cluster("ingester", 2))["ring"]["replication_factor"]
+    assert rf == 3
+
 
 if __name__ == "__main__":
     unittest.main()
