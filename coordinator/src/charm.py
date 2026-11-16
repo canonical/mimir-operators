@@ -11,7 +11,6 @@ https://discourse.charmhub.io/t/4208
 """
 
 import hashlib
-import json
 import logging
 import socket
 from typing import Any, Dict, List, Optional, Union, cast
@@ -59,6 +58,7 @@ from ops.model import ModelError
 from ops.pebble import Error as PebbleError
 from ops.pebble import ExecError
 
+from lock import Lock
 from mimir_config import MIMIR_ROLES_CONFIG, MimirConfig
 from nginx_config import NginxHelper
 
@@ -88,10 +88,6 @@ def _truncate_label_value(value: str, max_length: int = 63) -> str:
 # `$__rate_interval` variable and `irate` function would keep working as expected.
 DEFAULT_COS_GLOBAL_SCRAPE_INTERVAL = "60s"
 
-# Peer relation app databag key used to persist, across hooks and coordinator units, which
-# roles have reached the minimum worker count required to lock in their replication_factor.
-REPLICATION_LOCK_STATE_KEY = "replication-lock-state"
-
 
 class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
     """Charm the service."""
@@ -117,7 +113,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
         self.out_of_order_time_window = str(self.config["out_of_order_time_window"])
         # Loaded from (and later written back to) the mimir-peers app databag so the
         # replication factor lock survives across hooks and coordinator units.
-        self._replication_lock_state: Dict[str, bool] = self._load_replication_lock_state()
+        self._replication_lock = Lock(self)
         self.coordinator = Coordinator(
             charm=self,
             roles_config=MIMIR_ROLES_CONFIG,
@@ -156,7 +152,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
                 cardinality_analysis_enabled=bool(self.config["cardinality_analysis_enabled"]),
                 out_of_order_time_window=self.out_of_order_time_window if is_valid_timespec(self.out_of_order_time_window) else None,
                 reporting_enabled=bool(self.config["reporting_enabled"]),
-                replication_lock_state=self._replication_lock_state,
+                replication_lock_state=self._replication_lock.state,
             ).config,
             worker_ports=lambda _: tuple({8080, 9095}),
             workload_tracing_protocols=["jaeger_thrift_http"],
@@ -666,33 +662,7 @@ class MimirCoordinatorK8SOperatorCharm(ops.CharmBase):
             self.ingress.provide_ingress_requirements(port=port)
 
         # Persist any replication-factor lock state changes made during this reconcile.
-        self._store_replication_lock_state(self._replication_lock_state)
-
-    def _load_replication_lock_state(self) -> Dict[str, bool]:
-        """Load the persisted replication-factor lock state from the peer relation."""
-        relation = self.model.get_relation("mimir-peers")
-        if not relation:
-            return {}
-        raw = relation.data[self.app].get(REPLICATION_LOCK_STATE_KEY)
-        if not raw:
-            return {}
-        try:
-            state = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Failed to decode replication lock state from peer relation data")
-            return {}
-        if not isinstance(state, dict):
-            return {}
-        return {str(k): bool(v) for k, v in state.items()}
-
-    def _store_replication_lock_state(self, state: Dict[str, bool]) -> None:
-        """Persist the replication-factor lock state to the peer relation app databag."""
-        if not self.unit.is_leader():
-            return
-        relation = self.model.get_relation("mimir-peers")
-        if not relation:
-            return
-        relation.data[self.app][REPLICATION_LOCK_STATE_KEY] = json.dumps(state)
+        self._replication_lock.save()
 
     def _build_grafana_source_extra_fields(self) -> Dict[str, Any]:
         """Extra fields needed for the grafana-source relation, like data correlation config."""
