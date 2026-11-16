@@ -1,4 +1,5 @@
 import unittest
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -460,9 +461,10 @@ def test_reporting_disabled(topology, coordinator):
 
 
 def _replication_factor(config: dict, path) -> int:
+    value: Any = config
     for key in path:
-        config = config[key]
-    return config
+        value = value[key]
+    return value
 
 
 def _make_cluster(role: str, scale: int):
