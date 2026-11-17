@@ -86,8 +86,8 @@ def test_baseline_push_and_query_and_replication_factor(juju: jubilant.Juju):
     assert get_replication_factor(config, "ingester") == 3
 
 
-def test_removing_one_write_unit_keeps_mimir_available(juju: jubilant.Juju):
-    """Losing 1 of 3 write units must not disrupt writes/queries or drop replication_factor."""
+def test_removing_one_write_unit_keeps_replication_factor(juju: jubilant.Juju):
+    """Removing 1 of 3 write units must not change the ingester replication_factor from 3."""
     juju.cli("remove-unit", "worker-write", "--num-units", "1")
 
     juju.wait(
@@ -103,8 +103,8 @@ def test_removing_one_write_unit_keeps_mimir_available(juju: jubilant.Juju):
     assert get_replication_factor(config, "ingester") == 3
 
 
-def test_adding_the_unit_back_keeps_mimir_available(juju: jubilant.Juju):
-    """Scaling back up to 3 write units must not cause a second disruption either."""
+def test_adding_the_unit_back_keeps_replication_factor(juju: jubilant.Juju):
+    """Scaling back up to 3 write units must leave the ingester replication_factor at 3."""
     juju.cli("add-unit", "worker-write")
 
     juju.wait(
